@@ -38,48 +38,52 @@ def extract_id(x):
     return x
 
 def fetch_and_process_data():
-    # Fetch necessary data
-    projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
-    employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'])
-    sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
-    financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
-    timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'project_id', 'unit_amount', 'date'])
-    tasks = fetch_odoo_data('project.task', ['project_id', 'stage_id', 'create_date', 'date_end', 'kanban_state'])
+    try:
+        # Fetch necessary data
+        projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
+        employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'])
+        sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
+        financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
+        timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'project_id', 'unit_amount', 'date'])
+        tasks = fetch_odoo_data('project.task', ['project_id', 'stage_id', 'create_date', 'date_end'])  # Removed 'kanban_state'
 
-    # Convert to pandas DataFrames with data validation
-    df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
-    df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id'])
-    df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
-    df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
-    df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
-    df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end', 'kanban_state'])
+        # Convert to pandas DataFrames with data validation
+        df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
+        df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id'])
+        df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
+        df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
+        df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
+        df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
 
-    # Convert date columns to datetime
-    date_columns = {
-        'df_projects': ['date_start', 'date'],
-        'df_sales': ['date_order'],
-        'df_financials': ['date'],
-        'df_timesheet': ['date'],
-        'df_tasks': ['create_date', 'date_end']
-    }
+        # Convert date columns to datetime
+        date_columns = {
+            'df_projects': ['date_start', 'date'],
+            'df_sales': ['date_order'],
+            'df_financials': ['date'],
+            'df_timesheet': ['date'],
+            'df_tasks': ['create_date', 'date_end']
+        }
 
-    for df_name, columns in date_columns.items():
-        df = locals()[df_name]
-        for col in columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+        for df_name, columns in date_columns.items():
+            df = locals()[df_name]
+            for col in columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
 
-    # Apply extract_id function to relevant columns
-    df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
-    df_timesheet['employee_id'] = df_timesheet['employee_id'].apply(extract_id)
-    df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
+        # Apply extract_id function to relevant columns
+        df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
+        df_timesheet['employee_id'] = df_timesheet['employee_id'].apply(extract_id)
+        df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
 
-    # Create dictionaries to map IDs to names
-    project_id_to_name = dict(zip(df_projects['id'], df_projects['name']))
-    employee_id_to_name = dict(zip(df_employees['id'], df_employees['name']))
+        # Create dictionaries to map IDs to names
+        project_id_to_name = dict(zip(df_projects['id'], df_projects['name']))
+        employee_id_to_name = dict(zip(df_employees['id'], df_employees['name']))
 
-    # Map IDs to names in timesheet and tasks DataFrames
-    df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
-    df_timesheet['employee_name'] = df_timesheet['employee_id'].map(employee_id_to_name)
-    df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
+        # Map IDs to names in timesheet and tasks DataFrames
+        df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
+        df_timesheet['employee_name'] = df_timesheet['employee_id'].map(employee_id_to_name)
+        df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
 
-    return df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks
+        return df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks
+    except Exception as e:
+        print(f"Error in fetch_and_process_data: {e}")
+        return None, None, None, None, None, None

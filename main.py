@@ -1,7 +1,6 @@
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
-import plotly.express as px
 import plotly.graph_objs as go
 import pandas as pd
 from datetime import datetime, timedelta
@@ -9,6 +8,10 @@ from odoo import fetch_and_process_data
 
 # Fetch and process data
 df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = fetch_and_process_data()
+
+if df_projects is None:
+    print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
+    exit(1)
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -100,18 +103,21 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
         filtered_projects = filtered_projects[filtered_projects['name'].isin(selected_projects)]
     
     if filtered_projects.empty:
-        return px.scatter_geo(), px.bar()
+        return go.Figure(), go.Figure()
     
-    fig_map = px.scatter_geo(filtered_projects, 
-                             locations='partner_id', 
-                             color='name',
-                             hover_name='name', 
-                             projection='natural earth')
+    fig_map = go.Figure(go.Scattergeo(
+        locations=filtered_projects['partner_id'],
+        text=filtered_projects['name'],
+        mode='markers',
+        marker=dict(color=filtered_projects['name'], size=10)
+    ))
+    fig_map.update_layout(title='Project Locations')
     
     project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
     project_counts['date_start'] = project_counts['date_start'].astype(str)
     
-    fig_kpi = px.bar(project_counts, x='date_start', y='count', title='Projects by Month')
+    fig_kpi = go.Figure(go.Bar(x=project_counts['date_start'], y=project_counts['count']))
+    fig_kpi.update_layout(title='Projects by Month')
     
     return fig_map, fig_kpi
 
@@ -131,10 +137,11 @@ def update_financials(start_date, end_date):
     ]
     
     if filtered_financials.empty:
-        return px.line()
+        return go.Figure()
     
-    fig = px.line(filtered_financials.groupby('date')['amount_total'].sum().reset_index(), 
-                  x='date', y='amount_total', title='Daily Financial Summary')
+    daily_financials = filtered_financials.groupby('date')['amount_total'].sum().reset_index()
+    fig = go.Figure(go.Scatter(x=daily_financials['date'], y=daily_financials['amount_total'], mode='lines'))
+    fig.update_layout(title='Daily Financial Summary')
     return fig
 
 # Callback for Projects dashboard
@@ -169,21 +176,18 @@ def update_projects(start_date, end_date, selected_projects):
     hours_per_project = hours_per_project.sort_values('unit_amount', ascending=False)
     hours_per_project['unit_amount'] = hours_per_project['unit_amount'].round().astype(int)  # Round to integers
     
-    fig_hours = px.bar(hours_per_project, x='project_name', y='unit_amount', 
-                       title='Hours Spent per Project',
-                       labels={'unit_amount': 'Hours', 'project_name': 'Project'})
-    fig_hours.update_layout(xaxis={'categoryorder':'total descending'})
+    fig_hours = go.Figure(go.Bar(x=hours_per_project['project_name'], y=hours_per_project['unit_amount']))
+    fig_hours.update_layout(title='Hours Spent per Project', xaxis_title='Project', yaxis_title='Hours')
     
     # Tasks opened and closed
     tasks_opened = filtered_tasks.groupby('project_name').size().reset_index(name='opened')
     tasks_closed = filtered_tasks[filtered_tasks['date_end'].notna()].groupby('project_name').size().reset_index(name='closed')
     tasks_stats = pd.merge(tasks_opened, tasks_closed, on='project_name', how='outer').fillna(0)
     
-    fig_tasks = px.bar(tasks_stats, x='project_name', y=['opened', 'closed'], 
-                       title='Tasks Opened and Closed per Project',
-                       labels={'value': 'Number of Tasks', 'project_name': 'Project'},
-                       barmode='stack')
-    fig_tasks.update_layout(xaxis={'categoryorder':'total descending'})
+    fig_tasks = go.Figure()
+    fig_tasks.add_trace(go.Bar(x=tasks_stats['project_name'], y=tasks_stats['opened'], name='Opened'))
+    fig_tasks.add_trace(go.Bar(x=tasks_stats['project_name'], y=tasks_stats['closed'], name='Closed'))
+    fig_tasks.update_layout(barmode='stack', title='Tasks Opened and Closed per Project', xaxis_title='Project', yaxis_title='Number of Tasks')
     
     return fig_hours, fig_tasks
 
@@ -216,9 +220,12 @@ def update_employee_hours(start_date, end_date, selected_projects, selected_empl
     
     total_hours = employee_hours['unit_amount'].sum()
     
-    fig = px.bar(employee_hours, x='employee_name', y='unit_amount', color='project_name', 
-                 title='Employee Hours per Project', labels={'unit_amount': 'Hours', 'employee_name': 'Employee'})
-    fig.update_layout(barmode='stack')
+    fig = go.Figure()
+    for project in employee_hours['project_name'].unique():
+        project_data = employee_hours[employee_hours['project_name'] == project]
+        fig.add_trace(go.Bar(x=project_data['employee_name'], y=project_data['unit_amount'], name=project))
+    
+    fig.update_layout(barmode='stack', title='Employee Hours per Project', xaxis_title='Employee', yaxis_title='Hours')
     
     return fig, f"Total Hours Worked: {total_hours}"
 
@@ -238,10 +245,11 @@ def update_sales(start_date, end_date):
     ]
     
     if filtered_sales.empty:
-        return px.line()
+        return go.Figure()
     
     daily_sales = filtered_sales.groupby('date_order')['amount_total'].sum().reset_index()
-    fig = px.line(daily_sales, x='date_order', y='amount_total', title='Daily Sales')
+    fig = go.Figure(go.Scatter(x=daily_sales['date_order'], y=daily_sales['amount_total'], mode='lines'))
+    fig.update_layout(title='Daily Sales')
     return fig
 
 # Callback for Reporting dashboard
