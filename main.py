@@ -34,8 +34,8 @@ def fetch_odoo_data(model, fields, domain=[], limit=None):
         return []
 
 # Fetch necessary data
-projects = fetch_odoo_data('project.project', ['name', 'partner_id', 'user_id', 'date_start', 'date'])
-employees = fetch_odoo_data('hr.employee', ['name', 'department_id', 'job_id'])
+projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date'])
+employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'])
 sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
 financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
 timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'project_id', 'unit_amount', 'date'])
@@ -48,8 +48,8 @@ def validate_dataframe(df, required_columns):
             df[col] = None
     return df
 
-df_projects = validate_dataframe(pd.DataFrame(projects), ['name', 'partner_id', 'user_id', 'date_start', 'date'])
-df_employees = validate_dataframe(pd.DataFrame(employees), ['name', 'department_id', 'job_id'])
+df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date'])
+df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id'])
 df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
 df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
 df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
@@ -69,15 +69,23 @@ for df_name, columns in date_columns.items():
     for col in columns:
         df[col] = pd.to_datetime(df[col], errors='coerce')
 
-# Function to extract ID from list
+# Function to extract ID from list or tuple
 def extract_id(x):
-    if isinstance(x, list) and len(x) > 0:
+    if isinstance(x, (list, tuple)) and len(x) > 0:
         return x[0]
     return x
 
-# Apply extract_id function to project_id columns
+# Apply extract_id function to relevant columns
 df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
+df_timesheet['employee_id'] = df_timesheet['employee_id'].apply(extract_id)
 df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
+
+# Create a dictionary to map project IDs to names
+project_id_to_name = dict(zip(df_projects['id'], df_projects['name']))
+
+# Map project IDs to names in timesheet and tasks DataFrames
+df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
+df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -222,22 +230,27 @@ def update_projects(start_date, end_date, selected_projects):
     ]
     
     if selected_projects:
-        filtered_timesheet = filtered_timesheet[filtered_timesheet['project_id'].isin(selected_projects)]
-        filtered_tasks = filtered_tasks[filtered_tasks['project_id'].isin(selected_projects)]
+        filtered_timesheet = filtered_timesheet[filtered_timesheet['project_name'].isin(selected_projects)]
+        filtered_tasks = filtered_tasks[filtered_tasks['project_name'].isin(selected_projects)]
     
     # Hours spent per project
-    hours_per_project = filtered_timesheet.groupby('project_id')['unit_amount'].sum().reset_index()
-    fig_hours = px.bar(hours_per_project, x='project_id', y='unit_amount', title='Hours Spent per Project')
+    hours_per_project = filtered_timesheet.groupby('project_name')['unit_amount'].sum().reset_index()
+    hours_per_project = hours_per_project.sort_values('unit_amount', ascending=False)
+    fig_hours = px.bar(hours_per_project, x='project_name', y='unit_amount', 
+                       title='Hours Spent per Project',
+                       labels={'unit_amount': 'Hours', 'project_name': 'Project'})
+    fig_hours.update_layout(xaxis={'categoryorder':'total descending'})
     
     # Tasks opened and closed
-    tasks_opened = filtered_tasks.groupby('project_id').size().reset_index(name='opened')
-    tasks_closed = filtered_tasks[filtered_tasks['date_end'].notna()].groupby('project_id').size().reset_index(name='closed')
-    tasks_stats = pd.merge(tasks_opened, tasks_closed, on='project_id', how='outer').fillna(0)
+    tasks_opened = filtered_tasks.groupby('project_name').size().reset_index(name='opened')
+    tasks_closed = filtered_tasks[filtered_tasks['date_end'].notna()].groupby('project_name').size().reset_index(name='closed')
+    tasks_stats = pd.merge(tasks_opened, tasks_closed, on='project_name', how='outer').fillna(0)
     
-    fig_tasks = go.Figure()
-    fig_tasks.add_trace(go.Bar(x=tasks_stats['project_id'], y=tasks_stats['opened'], name='Opened Tasks'))
-    fig_tasks.add_trace(go.Bar(x=tasks_stats['project_id'], y=tasks_stats['closed'], name='Closed Tasks'))
-    fig_tasks.update_layout(barmode='group', title='Tasks Opened and Closed per Project')
+    fig_tasks = px.bar(tasks_stats, x='project_name', y=['opened', 'closed'], 
+                       title='Tasks Opened and Closed per Project',
+                       labels={'value': 'Number of Tasks', 'project_name': 'Project'},
+                       barmode='stack')
+    fig_tasks.update_layout(xaxis={'categoryorder':'total descending'})
     
     return fig_hours, fig_tasks
 
@@ -259,15 +272,15 @@ def update_employee_hours(start_date, end_date, selected_projects, selected_empl
     ]
     
     if selected_projects:
-        filtered_timesheet = filtered_timesheet[filtered_timesheet['project_id'].isin(selected_projects)]
+        filtered_timesheet = filtered_timesheet[filtered_timesheet['project_name'].isin(selected_projects)]
     
     if selected_employees:
         filtered_timesheet = filtered_timesheet[filtered_timesheet['employee_id'].isin(selected_employees)]
     
-    employee_hours = filtered_timesheet.groupby(['employee_id', 'project_id'])['unit_amount'].sum().reset_index()
+    employee_hours = filtered_timesheet.groupby(['employee_id', 'project_name'])['unit_amount'].sum().reset_index()
     
-    fig = px.bar(employee_hours, x='employee_id', y='unit_amount', color='project_id', 
-                 title='Employee Hours per Project', labels={'unit_amount': 'Hours'})
+    fig = px.bar(employee_hours, x='employee_id', y='unit_amount', color='project_name', 
+                 title='Employee Hours per Project', labels={'unit_amount': 'Hours', 'employee_id': 'Employee'})
     fig.update_layout(barmode='stack')
     
     return fig
