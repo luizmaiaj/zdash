@@ -150,7 +150,10 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
                              hover_name='name', 
                              projection='natural earth')
     
+    # Group by month and convert to string for JSON serialization
     project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
+    project_counts['date_start'] = project_counts['date_start'].astype(str)
+    
     fig_kpi = px.bar(project_counts, x='date_start', y='count', title='Projects by Month')
     
     return fig_map, fig_kpi
