@@ -1,91 +1,14 @@
-import os
-from dotenv import find_dotenv, load_dotenv
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
 import plotly.graph_objs as go
 import pandas as pd
-import xmlrpc.client
 from datetime import datetime, timedelta
+from odoo import fetch_and_process_data
 
-# Load environment variables
-load_dotenv(find_dotenv())
-
-# Odoo API connection
-url = os.getenv('ODOO_URL')
-db = os.getenv('ODOO_DB')
-username = os.getenv('ODOO_USERNAME')
-api_key = os.getenv('ODOO_API_KEY')
-
-# Create XML-RPC client with allow_none=True
-common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common', allow_none=True)
-uid = common.authenticate(db, username, api_key, {})
-models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object', allow_none=True)
-
-# Function to fetch data from Odoo
-def fetch_odoo_data(model, fields, domain=[], limit=None):
-    try:
-        result = models.execute_kw(db, uid, api_key, model, 'search_read', [domain, fields], {'limit': limit})
-        cleaned_result = [{k: v for k, v in record.items() if v is not None} for record in result]
-        return cleaned_result
-    except Exception as err:
-        print(f"Error fetching data from Odoo: {err}")
-        return []
-
-# Fetch necessary data
-projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date'])
-employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'])
-sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
-financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
-timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'project_id', 'unit_amount', 'date'])
-tasks = fetch_odoo_data('project.task', ['project_id', 'stage_id', 'create_date', 'date_end'])
-
-# Convert to pandas DataFrames with data validation
-def validate_dataframe(df, required_columns):
-    for col in required_columns:
-        if col not in df.columns:
-            df[col] = None
-    return df
-
-df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date'])
-df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id'])
-df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
-df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
-df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
-df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
-
-# Convert date columns to datetime
-date_columns = {
-    'df_projects': ['date_start', 'date'],
-    'df_sales': ['date_order'],
-    'df_financials': ['date'],
-    'df_timesheet': ['date'],
-    'df_tasks': ['create_date', 'date_end']
-}
-
-for df_name, columns in date_columns.items():
-    df = locals()[df_name]
-    for col in columns:
-        df[col] = pd.to_datetime(df[col], errors='coerce')
-
-# Function to extract ID from list or tuple
-def extract_id(x):
-    if isinstance(x, (list, tuple)) and len(x) > 0:
-        return x[0]
-    return x
-
-# Apply extract_id function to relevant columns
-df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
-df_timesheet['employee_id'] = df_timesheet['employee_id'].apply(extract_id)
-df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
-
-# Create a dictionary to map project IDs to names
-project_id_to_name = dict(zip(df_projects['id'], df_projects['name']))
-
-# Map project IDs to names in timesheet and tasks DataFrames
-df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
-df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
+# Fetch and process data
+df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = fetch_and_process_data()
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -138,12 +61,19 @@ app.layout = html.Div([
         ]),
         dcc.Tab(label='Employees', children=[
             html.Div([
+                html.H3(id='total-hours'),
                 dcc.Graph(id='employee-hours-chart')
             ])
         ]),
         dcc.Tab(label='Sales', children=[
             html.Div([
                 dcc.Graph(id='sales-chart')
+            ])
+        ]),
+        dcc.Tab(label='Reporting', children=[
+            html.Div([
+                html.H3("Data Quality Report"),
+                html.Div(id='data-quality-report')
             ])
         ]),
     ])
@@ -235,7 +165,10 @@ def update_projects(start_date, end_date, selected_projects):
     
     # Hours spent per project
     hours_per_project = filtered_timesheet.groupby('project_name')['unit_amount'].sum().reset_index()
+    hours_per_project = hours_per_project[hours_per_project['unit_amount'] > 0]  # Remove projects with no hours
     hours_per_project = hours_per_project.sort_values('unit_amount', ascending=False)
+    hours_per_project['unit_amount'] = hours_per_project['unit_amount'].round().astype(int)  # Round to integers
+    
     fig_hours = px.bar(hours_per_project, x='project_name', y='unit_amount', 
                        title='Hours Spent per Project',
                        labels={'unit_amount': 'Hours', 'project_name': 'Project'})
@@ -256,7 +189,8 @@ def update_projects(start_date, end_date, selected_projects):
 
 # Callback for Employees dashboard
 @app.callback(
-    Output('employee-hours-chart', 'figure'),
+    [Output('employee-hours-chart', 'figure'),
+     Output('total-hours', 'children')],
     [Input('date-range', 'start_date'),
      Input('date-range', 'end_date'),
      Input('project-filter', 'value'),
@@ -275,15 +209,81 @@ def update_employee_hours(start_date, end_date, selected_projects, selected_empl
         filtered_timesheet = filtered_timesheet[filtered_timesheet['project_name'].isin(selected_projects)]
     
     if selected_employees:
-        filtered_timesheet = filtered_timesheet[filtered_timesheet['employee_id'].isin(selected_employees)]
+        filtered_timesheet = filtered_timesheet[filtered_timesheet['employee_name'].isin(selected_employees)]
     
-    employee_hours = filtered_timesheet.groupby(['employee_id', 'project_name'])['unit_amount'].sum().reset_index()
+    employee_hours = filtered_timesheet.groupby(['employee_name', 'project_name'])['unit_amount'].sum().reset_index()
+    employee_hours['unit_amount'] = employee_hours['unit_amount'].round().astype(int)  # Round to integers
     
-    fig = px.bar(employee_hours, x='employee_id', y='unit_amount', color='project_name', 
-                 title='Employee Hours per Project', labels={'unit_amount': 'Hours', 'employee_id': 'Employee'})
+    total_hours = employee_hours['unit_amount'].sum()
+    
+    fig = px.bar(employee_hours, x='employee_name', y='unit_amount', color='project_name', 
+                 title='Employee Hours per Project', labels={'unit_amount': 'Hours', 'employee_name': 'Employee'})
     fig.update_layout(barmode='stack')
     
+    return fig, f"Total Hours Worked: {total_hours}"
+
+# Callback for Sales dashboard
+@app.callback(
+    Output('sales-chart', 'figure'),
+    [Input('date-range', 'start_date'),
+     Input('date-range', 'end_date')]
+)
+def update_sales(start_date, end_date):
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    
+    filtered_sales = df_sales[
+        (df_sales['date_order'] >= start_date) &
+        (df_sales['date_order'] <= end_date)
+    ]
+    
+    if filtered_sales.empty:
+        return px.line()
+    
+    daily_sales = filtered_sales.groupby('date_order')['amount_total'].sum().reset_index()
+    fig = px.line(daily_sales, x='date_order', y='amount_total', title='Daily Sales')
     return fig
+
+# Callback for Reporting dashboard
+@app.callback(
+    Output('data-quality-report', 'children'),
+    [Input('date-range', 'start_date'),
+     Input('date-range', 'end_date')]
+)
+def update_data_quality_report(start_date, end_date):
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    
+    report = []
+    
+    # Check for projects with no hours logged
+    projects_without_hours = set(df_projects['name']) - set(df_timesheet['project_name'])
+    if projects_without_hours:
+        report.append(html.P(f"Projects with no hours logged: {', '.join(projects_without_hours)}"))
+    
+    # Check for employees with no hours logged
+    employees_without_hours = set(df_employees['name']) - set(df_timesheet['employee_name'])
+    if employees_without_hours:
+        report.append(html.P(f"Employees with no hours logged: {', '.join(employees_without_hours)}"))
+    
+    # Check for inconsistent project status (closed projects with open tasks)
+    closed_projects = df_projects[df_projects['active'] == False]['name']
+    open_tasks = df_tasks[df_tasks['date_end'].isna()]['project_name']
+    inconsistent_projects = set(closed_projects) & set(open_tasks)
+    if inconsistent_projects:
+        report.append(html.P(f"Closed projects with open tasks: {', '.join(inconsistent_projects)}"))
+    
+    # Suggestions for improvement
+    report.append(html.H4("Suggestions for improvement:"))
+    report.append(html.Ul([
+        html.Li("Add a burndown chart for each project to track progress"),
+        html.Li("Include a resource allocation view to optimize employee workload"),
+        html.Li("Implement a customer satisfaction metric for completed projects"),
+        html.Li("Add a risk assessment indicator for ongoing projects"),
+        html.Li("Include a profitability analysis comparing estimated vs. actual hours")
+    ]))
+    
+    return report
 
 if __name__ == '__main__':
     app.run_server(debug=True)
