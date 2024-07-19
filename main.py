@@ -109,15 +109,30 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
         locations=filtered_projects['partner_id'],
         text=filtered_projects['name'],
         mode='markers',
-        marker=dict(color=filtered_projects['name'], size=10)
+        marker=dict(
+            size=10,
+            color='blue',  # Use a single color for all markers
+            line=dict(width=3, color='rgba(68, 68, 68, 0)')
+        )
     ))
-    fig_map.update_layout(title='Project Locations')
+    fig_map.update_layout(
+        title='Project Locations',
+        geo=dict(
+            showland=True,
+            showcountries=True,
+            showocean=True,
+            countrywidth=0.5,
+            landcolor='rgb(243, 243, 243)',
+            oceancolor='rgb(208, 242, 255)',
+            projection=dict(type='natural earth')
+        )
+    )
     
     project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
     project_counts['date_start'] = project_counts['date_start'].astype(str)
     
     fig_kpi = go.Figure(go.Bar(x=project_counts['date_start'], y=project_counts['count']))
-    fig_kpi.update_layout(title='Projects by Month')
+    fig_kpi.update_layout(title='Projects by Month', xaxis_title='Month', yaxis_title='Number of Projects')
     
     return fig_map, fig_kpi
 
