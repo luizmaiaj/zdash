@@ -1,7 +1,7 @@
 import os
 from dotenv import find_dotenv, load_dotenv
 import dash
-from dash import dcc, html  # Updated import
+from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
 import pandas as pd
@@ -18,15 +18,19 @@ db = os.getenv('ODOO_DB')
 username = os.getenv('ODOO_USERNAME')
 api_key = os.getenv('ODOO_API_KEY')
 
-common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+# Create XML-RPC client with allow_none=True
+common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common', allow_none=True)
 uid = common.authenticate(db, username, api_key, {})
-models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object', allow_none=True)
 
 # Function to fetch data from Odoo
 def fetch_odoo_data(model, fields, domain=[], limit=None):
     try:
-        return models.execute_kw(db, uid, api_key, model, 'search_read', [domain, fields], {'limit': limit})
-    except xmlrpc.client.Fault as err:
+        result = models.execute_kw(db, uid, api_key, model, 'search_read', [domain, fields], {'limit': limit})
+        # Remove any None values from the result
+        cleaned_result = [{k: v for k, v in record.items() if v is not None} for record in result]
+        return cleaned_result
+    except Exception as err:
         print(f"Error fetching data from Odoo: {err}")
         return []
 
@@ -34,7 +38,7 @@ def fetch_odoo_data(model, fields, domain=[], limit=None):
 projects = fetch_odoo_data('project.project', ['name', 'partner_id', 'user_id', 'date_start', 'date'])
 employees = fetch_odoo_data('hr.employee', ['name', 'department_id', 'job_id'])
 sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
-financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])  # Changed 'type' to 'move_type'
+financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
 
 # Convert to pandas DataFrames
 df_projects = pd.DataFrame(projects)
@@ -59,7 +63,7 @@ app.layout = html.Div([
     # Project filter
     dcc.Dropdown(
         id='project-filter',
-        options=[{'label': i, 'value': i} for i in df_projects['name'].unique()],
+        options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if i],
         multi=True,
         placeholder="Select projects"
     ),
@@ -67,7 +71,7 @@ app.layout = html.Div([
     # Employee filter
     dcc.Dropdown(
         id='employee-filter',
-        options=[{'label': i, 'value': i} for i in df_employees['name'].unique()],
+        options=[{'label': i, 'value': i} for i in df_employees['name'].unique() if i],
         multi=True,
         placeholder="Select employees"
     ),
@@ -95,7 +99,6 @@ app.layout = html.Div([
                 dcc.Graph(id='sales-chart')
             ])
         ]),
-        # Add more tabs for other dashboards...
     ])
 ])
 
@@ -109,7 +112,6 @@ app.layout = html.Div([
      Input('employee-filter', 'value')]
 )
 def update_global_kpi(start_date, end_date, selected_projects, selected_employees):
-    # Filter data based on inputs
     filtered_projects = df_projects[
         (df_projects['date_start'] >= start_date) &
         (df_projects['date_start'] <= end_date)
@@ -117,14 +119,12 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
     if selected_projects:
         filtered_projects = filtered_projects[filtered_projects['name'].isin(selected_projects)]
     
-    # Create world map with project locations
     fig_map = px.scatter_geo(filtered_projects, 
                              locations='partner_id', 
                              color='name',
                              hover_name='name', 
                              projection='natural earth')
     
-    # Create KPI chart (example: project count by month)
     project_counts = filtered_projects.groupby(pd.to_datetime(filtered_projects['date_start']).dt.to_period('M')).size().reset_index(name='count')
     fig_kpi = px.bar(project_counts, x='date_start', y='count', title='Projects by Month')
     
@@ -145,8 +145,6 @@ def update_financials(start_date, end_date):
     fig = px.line(filtered_financials.groupby('date')['amount_total'].sum().reset_index(), 
                   x='date', y='amount_total', title='Daily Financial Summary')
     return fig
-
-# Add more callbacks for other dashboards...
 
 if __name__ == '__main__':
     app.run_server(debug=True)
