@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import plotly.graph_objs as go
 
 # Load environment variables
-load_dotenv(find_dotenv(raise_error_if_not_found=True))
+load_dotenv(find_dotenv())
 
 # Odoo API connection
 url = os.getenv('ODOO_URL')
@@ -40,11 +40,29 @@ employees = fetch_odoo_data('hr.employee', ['name', 'department_id', 'job_id'])
 sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
 financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
 
-# Convert to pandas DataFrames
-df_projects = pd.DataFrame(projects)
-df_employees = pd.DataFrame(employees)
-df_sales = pd.DataFrame(sales)
-df_financials = pd.DataFrame(financials)
+# Convert to pandas DataFrames with data validation
+def validate_dataframe(df, required_columns):
+    for col in required_columns:
+        if col not in df.columns:
+            df[col] = None
+    return df
+
+df_projects = validate_dataframe(pd.DataFrame(projects), ['name', 'partner_id', 'user_id', 'date_start', 'date'])
+df_employees = validate_dataframe(pd.DataFrame(employees), ['name', 'department_id', 'job_id'])
+df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
+df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
+
+# Convert date columns to datetime
+date_columns = {
+    'df_projects': ['date_start', 'date'],
+    'df_sales': ['date_order'],
+    'df_financials': ['date']
+}
+
+for df_name, columns in date_columns.items():
+    df = locals()[df_name]
+    for col in columns:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -63,7 +81,7 @@ app.layout = html.Div([
     # Project filter
     dcc.Dropdown(
         id='project-filter',
-        options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if i],
+        options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)],
         multi=True,
         placeholder="Select projects"
     ),
@@ -71,7 +89,7 @@ app.layout = html.Div([
     # Employee filter
     dcc.Dropdown(
         id='employee-filter',
-        options=[{'label': i, 'value': i} for i in df_employees['name'].unique() if i],
+        options=[{'label': i, 'value': i} for i in df_employees['name'].unique() if pd.notna(i)],
         multi=True,
         placeholder="Select employees"
     ),
@@ -112,6 +130,9 @@ app.layout = html.Div([
      Input('employee-filter', 'value')]
 )
 def update_global_kpi(start_date, end_date, selected_projects, selected_employees):
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    
     filtered_projects = df_projects[
         (df_projects['date_start'] >= start_date) &
         (df_projects['date_start'] <= end_date)
@@ -119,13 +140,17 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
     if selected_projects:
         filtered_projects = filtered_projects[filtered_projects['name'].isin(selected_projects)]
     
+    # Fallback to empty DataFrame if no data
+    if filtered_projects.empty:
+        return px.scatter_geo(), px.bar()
+    
     fig_map = px.scatter_geo(filtered_projects, 
                              locations='partner_id', 
                              color='name',
                              hover_name='name', 
                              projection='natural earth')
     
-    project_counts = filtered_projects.groupby(pd.to_datetime(filtered_projects['date_start']).dt.to_period('M')).size().reset_index(name='count')
+    project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
     fig_kpi = px.bar(project_counts, x='date_start', y='count', title='Projects by Month')
     
     return fig_map, fig_kpi
@@ -137,10 +162,17 @@ def update_global_kpi(start_date, end_date, selected_projects, selected_employee
      Input('date-range', 'end_date')]
 )
 def update_financials(start_date, end_date):
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    
     filtered_financials = df_financials[
         (df_financials['date'] >= start_date) &
         (df_financials['date'] <= end_date)
     ]
+    
+    # Fallback to empty DataFrame if no data
+    if filtered_financials.empty:
+        return px.line()
     
     fig = px.line(filtered_financials.groupby('date')['amount_total'].sum().reset_index(), 
                   x='date', y='amount_total', title='Daily Financial Summary')
