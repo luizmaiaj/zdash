@@ -1,7 +1,7 @@
 import os
+from dotenv import find_dotenv, load_dotenv
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dcc, html  # Updated import
 from dash.dependencies import Input, Output
 import plotly.express as px
 import pandas as pd
@@ -9,8 +9,7 @@ import xmlrpc.client
 from datetime import datetime, timedelta
 import plotly.graph_objs as go
 
-from dotenv import find_dotenv, load_dotenv
-
+# Load environment variables
 load_dotenv(find_dotenv(raise_error_if_not_found=True))
 
 # Odoo API connection
@@ -25,13 +24,17 @@ models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
 
 # Function to fetch data from Odoo
 def fetch_odoo_data(model, fields, domain=[], limit=None):
-    return models.execute_kw(db, uid, api_key, model, 'search_read', [domain, fields], {'limit': limit})
+    try:
+        return models.execute_kw(db, uid, api_key, model, 'search_read', [domain, fields], {'limit': limit})
+    except xmlrpc.client.Fault as err:
+        print(f"Error fetching data from Odoo: {err}")
+        return []
 
 # Fetch necessary data
 projects = fetch_odoo_data('project.project', ['name', 'partner_id', 'user_id', 'date_start', 'date'])
 employees = fetch_odoo_data('hr.employee', ['name', 'department_id', 'job_id'])
 sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
-financials = fetch_odoo_data('account.move', ['name', 'type', 'amount_total', 'date'])
+financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])  # Changed 'type' to 'move_type'
 
 # Convert to pandas DataFrames
 df_projects = pd.DataFrame(projects)
