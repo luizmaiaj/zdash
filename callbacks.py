@@ -163,12 +163,12 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
 
     @app.callback(
         [Output('employee-hours-chart', 'figure'),
-         Output('total-hours', 'children')],
+        Output('total-hours', 'children')],
         [Input('date-range', 'start_date'),
-         Input('date-range', 'end_date'),
-         Input('project-filter', 'value'),
-         Input('employee-filter', 'value'),
-         Input('employee-chart-height', 'value')]
+        Input('date-range', 'end_date'),
+        Input('project-filter', 'value'),
+        Input('employee-filter', 'value'),
+        Input('employee-chart-height', 'value')]
     )
     def update_employee_hours(start_date, end_date, selected_projects, selected_employees, chart_height):
         start_date = pd.to_datetime(start_date)
@@ -199,7 +199,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 name=project,
                 text=project_data['unit_amount'],
                 textposition='auto',
-                hovertemplate='<b>%{x}</b><br>%{y} hours<br>%{text}<extra></extra>'
+                hovertemplate='<b>Employee:</b> %{x}<br><b>Project:</b> ' + project + '<br><b>Hours:</b> %{y}<extra></extra>'
             ))
         
         fig.update_layout(
@@ -214,7 +214,8 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 y=-0.5,
                 xanchor="center",
                 x=0.5
-            )
+            ),
+            margin=dict(b=150)  # Increase bottom margin to accommodate the legend
         )
         
         return fig, f"Total Hours Worked: {total_hours}"
@@ -266,7 +267,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
     @app.callback(
         Output('data-quality-report', 'children'),
         [Input('date-range', 'start_date'),
-         Input('date-range', 'end_date')]
+        Input('date-range', 'end_date')]
     )
     def update_data_quality_report(start_date, end_date):
         start_date = pd.to_datetime(start_date)
@@ -276,23 +277,26 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         
         # Check for projects with no hours logged
         projects_without_hours = set(df_projects['name']) - set(df_timesheet['project_name'])
-        if projects_without_hours:
-            report.append(html.Div([
-                html.H4("Projects with no hours logged:"),
-                html.Div([
-                    html.Ul([html.Li(project) for project in projects_without_hours], style={'column-count': 3})
-                ], style={'height': '200px', 'overflow': 'auto'})
-            ]))
         
         # Check for employees with no hours logged
         employees_without_hours = set(df_employees['name']) - set(df_timesheet['employee_name'])
-        if employees_without_hours:
-            report.append(html.Div([
+        
+        # Create side-by-side scrollable lists
+        report.append(html.Div([
+            html.Div([
+                html.H4("Projects with no hours logged:"),
+                html.Div([
+                    html.Ul([html.Li(project) for project in projects_without_hours], style={'column-count': 2})
+                ], style={'height': '400px', 'overflow': 'auto', 'border': '1px solid #ddd', 'padding': '10px'})
+            ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
+            
+            html.Div([
                 html.H4("Employees with no hours logged:"),
                 html.Div([
-                    html.Ul([html.Li(employee) for employee in employees_without_hours], style={'column-count': 3})
-                ], style={'height': '200px', 'overflow': 'auto'})
-            ]))
+                    html.Ul([html.Li(employee) for employee in employees_without_hours], style={'column-count': 2})
+                ], style={'height': '400px', 'overflow': 'auto', 'border': '1px solid #ddd', 'padding': '10px'})
+            ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '4%'})
+        ]))
         
         # Check for inconsistent project status (closed projects with open tasks)
         closed_projects = df_projects[df_projects['active'] == False]['name']
