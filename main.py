@@ -69,6 +69,16 @@ for df_name, columns in date_columns.items():
     for col in columns:
         df[col] = pd.to_datetime(df[col], errors='coerce')
 
+# Function to extract ID from list
+def extract_id(x):
+    if isinstance(x, list) and len(x) > 0:
+        return x[0]
+    return x
+
+# Apply extract_id function to project_id columns
+df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
+df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
+
 # Initialize Dash app
 app = dash.Dash(__name__)
 
@@ -197,7 +207,6 @@ def update_financials(start_date, end_date):
      Input('date-range', 'end_date'),
      Input('project-filter', 'value')]
 )
-
 def update_projects(start_date, end_date, selected_projects):
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
@@ -240,7 +249,6 @@ def update_projects(start_date, end_date, selected_projects):
      Input('project-filter', 'value'),
      Input('employee-filter', 'value')]
 )
-
 def update_employee_hours(start_date, end_date, selected_projects, selected_employees):
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
