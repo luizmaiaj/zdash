@@ -85,7 +85,9 @@ app.layout = html.Div([
         dcc.Tab(label='Reporting', children=[
             html.Div([
                 html.H3("Data Quality Report"),
-                html.Div(id='data-quality-report')
+                html.Div(id='data-quality-report'),
+                html.Button('Generate LLM Report', id='generate-llm-report', n_clicks=0),
+                html.Div(id='llm-report-output')
             ])
         ]),
     ])

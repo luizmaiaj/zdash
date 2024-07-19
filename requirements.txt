@@ -2,3 +2,6 @@ dash
 plotly
 pandas
 python-dotenv
+langchain
+llama-cpp-python
+langchain_community

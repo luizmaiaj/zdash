@@ -3,6 +3,7 @@ from dash import html
 import plotly.graph_objs as go
 import pandas as pd
 from datetime import datetime
+from llm_integration import generate_llm_report
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
     
@@ -316,3 +317,23 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         ]))
         
         return report
+
+    @app.callback(
+        Output('llm-report-output', 'children'),
+        Input('generate-llm-report', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def update_llm_report(n_clicks):
+        if n_clicks > 0:
+            report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
+            if report.startswith("Error:"):
+                return html.Div([
+                    html.H4("Error Generating LLM Report"),
+                    html.P(report, style={'color': 'red'})
+                ])
+            else:
+                return html.Div([
+                    html.H4("LLM Generated Report"),
+                    html.Pre(report, style={'white-space': 'pre-wrap', 'word-break': 'break-word'})
+                ])
+        return ""
