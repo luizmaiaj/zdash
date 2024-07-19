@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from odoo import fetch_and_process_data
 from callbacks import register_callbacks
+from llm_integration import check_ollama_status, extract_model_names
 
 # Fetch and process data
 df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = fetch_and_process_data()
@@ -11,6 +12,13 @@ df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = fet
 if df_projects is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
     exit(1)
+
+# Get available models
+ollama_running, available_models = check_ollama_status()
+if ollama_running:
+    model_options = [{'label': model, 'value': model} for model in extract_model_names(available_models)]
+else:
+    model_options = []
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -86,7 +94,16 @@ app.layout = html.Div([
             html.Div([
                 html.H3("Data Quality Report"),
                 html.Div(id='data-quality-report'),
-                html.Button('Generate LLM Report', id='generate-llm-report', n_clicks=0),
+                html.Div([
+                    dcc.Dropdown(
+                        id='model-selection',
+                        options=model_options,
+                        value=model_options[0]['value'] if model_options else None,
+                        placeholder="Select a model",
+                        style={'width': '300px', 'margin-bottom': '10px'}
+                    ),
+                    html.Button('Generate LLM Report', id='generate-llm-report', n_clicks=0),
+                ]),
                 html.Div(id='llm-report-output')
             ])
         ]),

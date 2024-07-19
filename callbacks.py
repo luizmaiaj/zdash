@@ -320,12 +320,13 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
 
     @app.callback(
         Output('llm-report-output', 'children'),
-        Input('generate-llm-report', 'n_clicks'),
+        [Input('generate-llm-report', 'n_clicks')],
+        [State('model-selection', 'value')],
         prevent_initial_call=True
     )
-    def update_llm_report(n_clicks):
-        if n_clicks > 0:
-            report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
+    def update_llm_report(n_clicks, selected_model):
+        if n_clicks > 0 and selected_model:
+            report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model)
             if report.startswith("Error:"):
                 return html.Div([
                     html.H4("Error Generating LLM Report"),
@@ -333,7 +334,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 ])
             else:
                 return html.Div([
-                    html.H4("LLM Generated Report"),
+                    html.H4(f"LLM Generated Report (Model: {selected_model})"),
                     html.Pre(report, style={'white-space': 'pre-wrap', 'word-break': 'break-word'})
                 ])
         return ""

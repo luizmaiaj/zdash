@@ -1,17 +1,30 @@
 from langchain_community.chat_models import ChatOllama
 from langchain.prompts import ChatPromptTemplate
 import pandas as pd
-import subprocess
 import requests
+from ollama import Client
 
 def check_ollama_status():
     try:
-        response = requests.get("http://localhost:11434/api/tags")
-        if response.status_code == 200:
-            return True, response.json()
-    except requests.RequestException:
-        pass
-    return False, None
+        client = Client()
+        models = client.list()
+        return True, models
+    except Exception:
+        return False, None
+
+def extract_model_names(models_info: list) -> tuple:
+    """
+    Extracts the model names from the models information.
+    :param models_info: A dictionary containing the models' information.
+    Return:
+    A tuple containing the model names.
+    """
+    # Filter out multimodal and embedding models
+    filtered_models = [
+        model for model in models_info['models']
+        if not any(keyword in model['name'].lower() for keyword in ['clip', 'vision', 'embed'])
+    ]
+    return tuple(model["name"] for model in filtered_models)
 
 def prepare_data_summary(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
     summary = f"""
@@ -33,24 +46,15 @@ def prepare_data_summary(df_projects, df_employees, df_sales, df_financials, df_
     """
     return summary
 
-def generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
+def generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model):
     data_summary = prepare_data_summary(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
 
     ollama_running, available_models = check_ollama_status()
     if not ollama_running:
         return "Error: Ollama is not running. Please start Ollama and try again."
 
-    model_name = "llama2"  # Default to a smaller model
-    if any("llama2:70b" in model for model in available_models.get('models', [])):
-        model_name = "llama2:70b"
-    elif any("llama2" in model for model in available_models.get('models', [])):
-        model_name = next(model for model in available_models.get('models', []) if "llama2" in model)
-    else:
-        try:
-            subprocess.run(["ollama", "pull", "llama2"], check=True)
-            model_name = "llama3:70B"
-        except subprocess.CalledProcessError:
-            return "Error: Failed to pull the Llama2 model. Please check your Ollama installation."
+    if selected_model not in extract_model_names(available_models):
+        return f"Error: Selected model '{selected_model}' is not available. Please choose an available model."
 
     prompt = ChatPromptTemplate.from_template("""
     You are an AI assistant tasked with analyzing business data and creating an engaging report in the style of John Oliver's Last Week Tonight. Use the following data summary to generate fun facts, insightful questions, and an entertaining report that highlights key trends and potential areas of improvement for the business.
@@ -68,7 +72,7 @@ def generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_t
 
     try:
         llm = ChatOllama(
-            model=model_name,
+            model=selected_model,
             temperature=0.7,
             keep_alive='1h',
             top_p=0.9,
