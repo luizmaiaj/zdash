@@ -38,6 +38,30 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         return project_options, employee_options
 
     @app.callback(
+        Output('llm-report-output', 'children'),
+        [Input('generate-llm-report', 'n_clicks')],
+        [State('model-selection', 'value'),
+         State('data-store', 'data')],
+        prevent_initial_call=True
+    )
+    def update_llm_report(n_clicks, selected_model, serialized_data):
+        if n_clicks > 0 and selected_model and serialized_data:
+            data = deserialize_dataframes(serialized_data)
+            df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
+            report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model)
+            if report.startswith("Error:"):
+                return html.Div([
+                    html.H4("Error Generating LLM Report"),
+                    html.P(report, style={'color': 'red'})
+                ])
+            else:
+                return html.Div([
+                    html.H4(f"LLM Generated Report (Model: {selected_model})"),
+                    html.Pre(report, style={'white-space': 'pre-wrap', 'word-break': 'break-word'})
+                ])
+        return ""
+
+    @app.callback(
         [Output('global-map', 'figure'),
          Output('global-kpi-chart', 'figure')],
         [Input('date-range', 'start_date'),
@@ -405,11 +429,15 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         if selected_employees:
             project_timesheet = project_timesheet[project_timesheet['employee_name'].isin(selected_employees)]
 
-        # Merge timesheet data with tasks to get task names
-        merged_data = pd.merge(project_timesheet, df_tasks[['id', 'name']], 
-                            left_on='task_id', right_on='id', how='left')
+        # Convert 'task_id' to string
+        project_timesheet['task_id_str'] = project_timesheet['task_id'].astype(str)
+        df_tasks['id_str'] = df_tasks['id'].astype(str)
 
-        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id'].astype(str)).fillna('Unknown Task')
+        # Merge timesheet data with tasks to get task names
+        merged_data = pd.merge(project_timesheet, df_tasks[['id_str', 'name']], 
+                            left_on='task_id_str', right_on='id_str', how='left')
+
+        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id_str']).fillna('Unknown Task')
 
         # Group by task and employee, summing the hours
         task_employee_hours = merged_data.groupby(['task_name', 'employee_name'])['unit_amount'].sum().unstack(fill_value=0)
@@ -477,9 +505,16 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         print(filtered_timesheet.head())
         print(filtered_timesheet.dtypes)
 
+        # Convert 'task_id' to string
+        filtered_timesheet['task_id_str'] = filtered_timesheet['task_id'].astype(str)
+
+        # Debug: print unique values in task_id_str column
+        print("Unique task_id_str values:")
+        print(filtered_timesheet['task_id_str'].unique())
+
         # Group by task and calculate total hours
         try:
-            task_hours = filtered_timesheet.groupby('task_id')['unit_amount'].sum().reset_index()
+            task_hours = filtered_timesheet.groupby('task_id_str')['unit_amount'].sum().reset_index()
         except Exception as e:
             print(f"Error in groupby operation: {e}")
             return html.Div(f"Error: Unable to process task data. Details: {str(e)}")
@@ -487,10 +522,13 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         # Filter tasks longer than 8 hours
         long_tasks = task_hours[task_hours['unit_amount'] > 8]
 
+        # Convert 'id' in df_tasks to string for merging
+        df_tasks['id_str'] = df_tasks['id'].astype(str)
+
         # Merge with task names
         try:
-            long_tasks = pd.merge(long_tasks, df_tasks[['id', 'name']], 
-                                left_on='task_id', right_on='id', how='left')
+            long_tasks = pd.merge(long_tasks, df_tasks[['id_str', 'name']], 
+                                left_on='task_id_str', right_on='id_str', how='left')
         except Exception as e:
             print(f"Error in merging task data: {e}")
             return html.Div(f"Error: Unable to merge task data. Details: {str(e)}")
@@ -502,7 +540,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         list_items = []
         for _, row in long_tasks.iterrows():
             task_name = row['name'] if pd.notna(row['name']) else 'Unknown Task'
-            task_id = row['task_id']
+            task_id = row['task_id_str']
             hours = row['unit_amount']
             list_items.append(html.Li(f"{task_name} (ID: {task_id}): {hours:.2f} hours"))
 
