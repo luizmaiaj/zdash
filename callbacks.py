@@ -371,60 +371,52 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         return report
 
     @app.callback(
-        Output('llm-report-output', 'children'),
-        [Input('generate-llm-report', 'n_clicks')],
-        [State('model-selection', 'value'),
-         State('data-store', 'data')],
-        prevent_initial_call=True
+        Output('project-filter', 'disabled'),
+        [Input('tabs', 'value')]
     )
-    def update_llm_report(n_clicks, selected_model, serialized_data):
-        if n_clicks > 0 and selected_model and serialized_data:
-            data = deserialize_dataframes(serialized_data)
-            df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
-            report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model)
-            if report.startswith("Error:"):
-                return html.Div([
-                    html.H4("Error Generating LLM Report"),
-                    html.P(report, style={'color': 'red'})
-                ])
-            else:
-                return html.Div([
-                    html.H4(f"LLM Generated Report (Model: {selected_model})"),
-                    html.Pre(report, style={'white-space': 'pre-wrap', 'word-break': 'break-word'})
-                ])
-        return ""
+    def disable_project_filter(tab):
+        return tab == 'project-tab'
 
     @app.callback(
         Output('project-tasks-employees-chart', 'figure'),
-        [Input('project-selector', 'value')]
+        [Input('project-selector', 'value'),
+        Input('date-range', 'start_date'),
+        Input('date-range', 'end_date'),
+        Input('employee-filter', 'value')]
     )
-    def update_project_tasks_employees_chart(selected_project):
+    def update_project_tasks_employees_chart(selected_project, start_date, end_date, selected_employees):
         if not selected_project:
             return go.Figure()
 
-        # Create a copy of the relevant data
-        project_timesheet = df_timesheet[df_timesheet['project_name'] == selected_project].copy()
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+
+        # Filter data based on date range
+        project_timesheet = df_timesheet[
+            (df_timesheet['project_name'] == selected_project) &
+            (df_timesheet['date'] >= start_date) &
+            (df_timesheet['date'] <= end_date)
+        ].copy()
 
         if project_timesheet.empty:
-            print(f"No timesheet data found for project: {selected_project}")
-            return go.Figure()  # Return empty figure if no data for the project
+            return go.Figure()
 
-        # Ensure task_id is of the same type in both dataframes
-        project_timesheet['task_id'] = project_timesheet['task_id'].astype(str)
-        df_tasks['id'] = df_tasks['id'].astype(str)
+        # Filter by selected employees if any
+        if selected_employees:
+            project_timesheet = project_timesheet[project_timesheet['employee_name'].isin(selected_employees)]
 
         # Merge timesheet data with tasks to get task names
-        merged_data = pd.merge(project_timesheet, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+        merged_data = pd.merge(project_timesheet, df_tasks[['id', 'name']], 
+                            left_on='task_id', right_on='id', how='left')
 
-        # If task name is not available, use task_id as a fallback
-        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id'])
-        merged_data['task_name'] = merged_data['task_name'].fillna('Unknown Task')
+        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id'].astype(str)).fillna('Unknown Task')
 
         # Group by task and employee, summing the hours
         task_employee_hours = merged_data.groupby(['task_name', 'employee_name'])['unit_amount'].sum().unstack(fill_value=0)
 
-        # Sort tasks by total hours (optional, but often useful)
-        task_employee_hours = task_employee_hours.sort_values(by=task_employee_hours.columns.tolist(), ascending=False, axis=0)
+        # Sort tasks by total hours in descending order
+        task_employee_hours['total'] = task_employee_hours.sum(axis=1)
+        task_employee_hours = task_employee_hours.sort_values('total', ascending=False).drop('total', axis=1)
 
         # Create the stacked bar chart
         fig = go.Figure()
@@ -437,8 +429,8 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 text=task_employee_hours[employee].round().astype(int),
                 textposition='auto',
                 hovertemplate='<b>%{x}</b><br>' +
-                              f'<b>{employee}</b>: ' +
-                              '%{text} hours<extra></extra>'
+                            f'<b>{employee}</b>: ' +
+                            '%{text} hours<extra></extra>'
             ))
 
         fig.update_layout(
@@ -455,9 +447,9 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 x=1.02
             ),
             height=1000,
-            margin=dict(r=200, b=100, t=50),  # Increased bottom margin for rotated labels
+            margin=dict(r=200, b=100, t=50),
             xaxis=dict(
-                tickangle=45,  # Rotate x-axis
+                tickangle=45,
                 tickmode='array',
                 tickvals=list(range(len(task_employee_hours.index))),
                 ticktext=task_employee_hours.index
@@ -465,3 +457,59 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         )
 
         return fig
+
+    @app.callback(
+        Output('long-tasks-list', 'children'),
+        [Input('date-range', 'start_date'),
+        Input('date-range', 'end_date')]
+    )
+    def update_long_tasks_list(start_date, end_date):
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+
+        # Filter timesheet data based on date range
+        filtered_timesheet = df_timesheet[
+            (df_timesheet['date'] >= start_date) &
+            (df_timesheet['date'] <= end_date)
+        ].copy()  # Create a copy to avoid SettingWithCopyWarning
+
+        # Debug: print the first few rows and data types of the filtered timesheet
+        print(filtered_timesheet.head())
+        print(filtered_timesheet.dtypes)
+
+        # Group by task and calculate total hours
+        try:
+            task_hours = filtered_timesheet.groupby('task_id')['unit_amount'].sum().reset_index()
+        except Exception as e:
+            print(f"Error in groupby operation: {e}")
+            return html.Div(f"Error: Unable to process task data. Details: {str(e)}")
+
+        # Filter tasks longer than 8 hours
+        long_tasks = task_hours[task_hours['unit_amount'] > 8]
+
+        # Merge with task names
+        try:
+            long_tasks = pd.merge(long_tasks, df_tasks[['id', 'name']], 
+                                left_on='task_id', right_on='id', how='left')
+        except Exception as e:
+            print(f"Error in merging task data: {e}")
+            return html.Div(f"Error: Unable to merge task data. Details: {str(e)}")
+
+        # Sort by hours descending
+        long_tasks = long_tasks.sort_values('unit_amount', ascending=False)
+
+        # Create the list items
+        list_items = []
+        for _, row in long_tasks.iterrows():
+            task_name = row['name'] if pd.notna(row['name']) else 'Unknown Task'
+            task_id = row['task_id']
+            hours = row['unit_amount']
+            list_items.append(html.Li(f"{task_name} (ID: {task_id}): {hours:.2f} hours"))
+
+        if not list_items:
+            return html.Div("No tasks longer than 8 hours found in the selected date range.")
+
+        return html.Div([
+            html.H4("Tasks Longer Than 8 Hours:"),
+            html.Ul(list_items)
+        ])

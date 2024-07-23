@@ -44,7 +44,7 @@ app.layout = html.Div([
     # Project filter
     dcc.Dropdown(
         id='project-filter',
-        options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)],
+        options=[{'label': i, 'value': i} for i in sorted(df_projects['name'].unique()) if pd.notna(i)],
         multi=True,
         placeholder="Select projects"
     ),
@@ -52,7 +52,7 @@ app.layout = html.Div([
     # Employee filter
     dcc.Dropdown(
         id='employee-filter',
-        options=[{'label': i, 'value': i} for i in df_employees['name'].unique() if pd.notna(i)],
+        options=[{'label': i, 'value': i} for i in sorted(df_employees['name'].unique()) if pd.notna(i)],
         multi=True,
         placeholder="Select employees"
     ),
@@ -81,11 +81,11 @@ app.layout = html.Div([
                 ])
             ])
         ]),
-        dcc.Tab(label='Project', children=[
+        dcc.Tab(label='Project', value='project-tab', children=[
             html.Div([
                 dcc.Dropdown(
                     id='project-selector',
-                    options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)],
+                    options=[{'label': i, 'value': i} for i in sorted(df_projects['name'].unique()) if pd.notna(i)],
                     placeholder="Select a project"
                 ),
                 dcc.Graph(id='project-tasks-employees-chart')
@@ -121,10 +121,11 @@ app.layout = html.Div([
                     ),
                     html.Button('Generate LLM Report', id='generate-llm-report', n_clicks=0),
                 ]),
-                html.Div(id='llm-report-output')
+                html.Div(id='llm-report-output'),
+                html.Div(id='long-tasks-list')  # Add this line
             ])
         ]),
-    ]),
+    ], id='tabs'),
 
     # Store for holding the current data
     dcc.Store(id='data-store')
