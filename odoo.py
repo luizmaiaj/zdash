@@ -44,8 +44,8 @@ def fetch_and_process_data():
         employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'])
         sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'])
         financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'])
-        timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'project_id', 'unit_amount', 'date'])
-        tasks = fetch_odoo_data('project.task', ['project_id', 'stage_id', 'create_date', 'date_end'])  # Removed 'kanban_state'
+        timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'task_id', 'project_id', 'unit_amount', 'date'])
+        tasks = fetch_odoo_data('project.task', ['id', 'project_id', 'stage_id', 'name', 'create_date', 'date_end'])  # Removed 'kanban_state'
 
         # Convert to pandas DataFrames with data validation
         df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])

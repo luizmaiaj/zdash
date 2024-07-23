@@ -81,6 +81,16 @@ app.layout = html.Div([
                 ])
             ])
         ]),
+        dcc.Tab(label='Project', children=[
+            html.Div([
+                dcc.Dropdown(
+                    id='project-selector',
+                    options=[{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)],
+                    placeholder="Select a project"
+                ),
+                dcc.Graph(id='project-tasks-employees-chart')
+            ])
+        ]),
         dcc.Tab(label='Employees', children=[
             html.Div([
                 html.H3(id='total-hours'),

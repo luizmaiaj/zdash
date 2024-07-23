@@ -99,16 +99,27 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
+        print("Financials columns:", df_financials.columns)
+
+        # Check if 'date' column exists, if not, try to find an alternative
+        date_column = 'date'
+        if date_column not in df_financials.columns:
+            date_columns = [col for col in df_financials.columns if 'date' in col.lower()]
+            if date_columns:
+                date_column = date_columns[0]
+            else:
+                return go.Figure()  # Return empty figure if no suitable date column found
+        
         filtered_financials = df_financials[
-            (df_financials['date'] >= start_date) &
-            (df_financials['date'] <= end_date)
+            (df_financials[date_column] >= start_date) &
+            (df_financials[date_column] <= end_date)
         ]
         
         if filtered_financials.empty:
             return go.Figure()
         
-        daily_financials = filtered_financials.groupby('date')['amount_total'].sum().reset_index()
-        fig = go.Figure(go.Scatter(x=daily_financials['date'], y=daily_financials['amount_total'], mode='lines'))
+        daily_financials = filtered_financials.groupby(date_column)['amount_total'].sum().reset_index()
+        fig = go.Figure(go.Scatter(x=daily_financials[date_column], y=daily_financials['amount_total'], mode='lines'))
         fig.update_layout(title='Daily Financial Summary')
         return fig
 
@@ -262,9 +273,20 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
+        print("Sales columns:", df_sales.columns)
+
+        # Check if 'date_order' column exists, if not, try to find an alternative
+        date_column = 'date_order'
+        if date_column not in df_sales.columns:
+            date_columns = [col for col in df_sales.columns if 'date' in col.lower()]
+            if date_columns:
+                date_column = date_columns[0]
+            else:
+                return go.Figure()  # Return empty figure if no suitable date column found
+        
         filtered_sales = df_sales[
-            (df_sales['date_order'] >= start_date) &
-            (df_sales['date_order'] <= end_date)
+            (df_sales[date_column] >= start_date) &
+            (df_sales[date_column] <= end_date)
         ]
         
         filtered_tasks = df_tasks[
@@ -279,11 +301,11 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         if filtered_sales.empty and filtered_tasks.empty:
             return go.Figure()
         
-        daily_sales = filtered_sales.groupby('date_order')['amount_total'].sum().reset_index()
+        daily_sales = filtered_sales.groupby(date_column)['amount_total'].sum().reset_index()
         daily_tasks = filtered_tasks.groupby('create_date').size().reset_index(name='task_count')
         
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=daily_sales['date_order'], y=daily_sales['amount_total'], name='Sales', mode='lines'))
+        fig.add_trace(go.Scatter(x=daily_sales[date_column], y=daily_sales['amount_total'], name='Sales', mode='lines'))
         fig.add_trace(go.Scatter(x=daily_tasks['create_date'], y=daily_tasks['task_count'], name='Tasks', mode='lines', yaxis='y2'))
         
         fig.update_layout(
@@ -371,3 +393,58 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                     html.Pre(report, style={'white-space': 'pre-wrap', 'word-break': 'break-word'})
                 ])
         return ""
+
+    @app.callback(
+        Output('project-tasks-employees-chart', 'figure'),
+        [Input('project-selector', 'value')]
+    )
+    def update_project_tasks_employees_chart(selected_project):
+        if not selected_project:
+            return go.Figure()
+
+        # Create a copy of the relevant data
+        project_timesheet = df_timesheet[df_timesheet['project_name'] == selected_project].copy()
+
+        if project_timesheet.empty:
+            print(f"No timesheet data found for project: {selected_project}")
+            return go.Figure()  # Return empty figure if no data for the project
+
+        # Convert task_id to numeric, replacing non-numeric values with NaN
+        project_timesheet.loc[:, 'task_id'] = pd.to_numeric(project_timesheet['task_id'], errors='coerce')
+
+        # Create a copy of df_tasks and convert id to numeric
+        tasks = df_tasks.copy()
+        tasks.loc[:, 'id'] = pd.to_numeric(tasks['id'], errors='coerce')
+
+        # Merge timesheet data with tasks to get task names
+        merged_data = pd.merge(project_timesheet, tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+
+        # If task name is not available, use task_id as a fallback
+        merged_data.loc[:, 'task_name'] = merged_data['name'].fillna(merged_data['task_id'].astype(str))
+        merged_data.loc[:, 'task_name'] = merged_data['task_name'].fillna('Unknown Task')
+
+        # Group by task and employee, summing the hours
+        task_employee_hours = merged_data.groupby(['task_name', 'employee_name'])['unit_amount'].sum().unstack(fill_value=0)
+
+        # Create the stacked bar chart
+        fig = go.Figure()
+
+        for employee in task_employee_hours.columns:
+            fig.add_trace(go.Bar(
+                name=employee,
+                x=task_employee_hours.index,
+                y=task_employee_hours[employee],
+                text=task_employee_hours[employee].round(2),
+                textposition='auto'
+            ))
+
+        fig.update_layout(
+            barmode='stack',
+            title=f'Tasks and Employee Hours for {selected_project}',
+            xaxis_title='Tasks',
+            yaxis_title='Hours',
+            legend_title='Employees',
+            height=600  # Adjust this value as needed
+        )
+
+        return fig
