@@ -251,13 +251,13 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
             yaxis_title='Hours',
             height=chart_height,
             legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-0.5,
-                xanchor="center",
-                x=0.5
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02
             ),
-            margin=dict(b=150)  # Increase bottom margin to accommodate the legend
+            margin=dict(r=200)  # Add right margin to accommodate the legend
         )
         
         return fig, f"Total Hours Worked: {total_hours}"
@@ -444,7 +444,15 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
             xaxis_title='Tasks',
             yaxis_title='Hours',
             legend_title='Employees',
-            height=600  # Adjust this value as needed
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02
+            ),
+            height=800,
+            margin=dict(r=200)  # Add right margin to accommodate the legend
         )
 
         return fig
