@@ -409,22 +409,22 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
             print(f"No timesheet data found for project: {selected_project}")
             return go.Figure()  # Return empty figure if no data for the project
 
-        # Convert task_id to numeric, replacing non-numeric values with NaN
-        project_timesheet.loc[:, 'task_id'] = pd.to_numeric(project_timesheet['task_id'], errors='coerce')
-
-        # Create a copy of df_tasks and convert id to numeric
-        tasks = df_tasks.copy()
-        tasks.loc[:, 'id'] = pd.to_numeric(tasks['id'], errors='coerce')
+        # Ensure task_id is of the same type in both dataframes
+        project_timesheet['task_id'] = project_timesheet['task_id'].astype(str)
+        df_tasks['id'] = df_tasks['id'].astype(str)
 
         # Merge timesheet data with tasks to get task names
-        merged_data = pd.merge(project_timesheet, tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+        merged_data = pd.merge(project_timesheet, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
 
         # If task name is not available, use task_id as a fallback
-        merged_data.loc[:, 'task_name'] = merged_data['name'].fillna(merged_data['task_id'].astype(str))
-        merged_data.loc[:, 'task_name'] = merged_data['task_name'].fillna('Unknown Task')
+        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id'])
+        merged_data['task_name'] = merged_data['task_name'].fillna('Unknown Task')
 
         # Group by task and employee, summing the hours
         task_employee_hours = merged_data.groupby(['task_name', 'employee_name'])['unit_amount'].sum().unstack(fill_value=0)
+
+        # Sort tasks by total hours (optional, but often useful)
+        task_employee_hours = task_employee_hours.sort_values(by=task_employee_hours.columns.tolist(), ascending=False, axis=0)
 
         # Create the stacked bar chart
         fig = go.Figure()
@@ -451,8 +451,9 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 xanchor="left",
                 x=1.02
             ),
-            height=800,
-            margin=dict(r=200)  # Add right margin to accommodate the legend
+            height=600,
+            margin=dict(r=200),  # Add right margin to accommodate the legend
+            xaxis=dict(tickangle=45)  # Rotate x-axis labels for better readability
         )
 
         return fig
