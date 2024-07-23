@@ -4,9 +4,39 @@ import plotly.graph_objs as go
 import pandas as pd
 from datetime import datetime
 from llm_integration import generate_llm_report
+from data_management import refresh_data, get_last_update_time, serialize_dataframes, deserialize_dataframes
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
-    
+
+    @app.callback(
+        [Output('data-store', 'data'),
+         Output('last-update-time', 'children')],
+        [Input('refresh-data', 'n_clicks')],
+        [State('data-store', 'data')]
+    )
+    def refresh_dashboard_data(n_clicks, current_data):
+        if n_clicks > 0 or current_data is None:
+            data, last_updated = refresh_data()
+            serialized_data = serialize_dataframes(data)
+            return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+        else:
+            last_updated = get_last_update_time()
+            return current_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+
+    @app.callback(
+        [Output('project-filter', 'options'),
+         Output('employee-filter', 'options')],
+        [Input('data-store', 'data')]
+    )
+    def update_filter_options(serialized_data):
+        if serialized_data is None:
+            return [], []
+        data = deserialize_dataframes(serialized_data)
+        df_projects, df_employees = data[:2]
+        project_options = [{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)]
+        employee_options = [{'label': i, 'value': i} for i in df_employees['name'].unique() if pd.notna(i)]
+        return project_options, employee_options
+
     @app.callback(
         [Output('global-map', 'figure'),
          Output('global-kpi-chart', 'figure')],
@@ -321,11 +351,14 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
     @app.callback(
         Output('llm-report-output', 'children'),
         [Input('generate-llm-report', 'n_clicks')],
-        [State('model-selection', 'value')],
+        [State('model-selection', 'value'),
+         State('data-store', 'data')],
         prevent_initial_call=True
     )
-    def update_llm_report(n_clicks, selected_model):
-        if n_clicks > 0 and selected_model:
+    def update_llm_report(n_clicks, selected_model, serialized_data):
+        if n_clicks > 0 and selected_model and serialized_data:
+            data = deserialize_dataframes(serialized_data)
+            df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
             report = generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model)
             if report.startswith("Error:"):
                 return html.Div([

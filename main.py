@@ -2,12 +2,13 @@ import dash
 from dash import dcc, html
 from datetime import datetime, timedelta
 import pandas as pd
-from odoo import fetch_and_process_data
 from callbacks import register_callbacks
 from llm_integration import check_ollama_status, extract_model_names
+from data_management import load_or_fetch_data, get_last_update_time
 
-# Fetch and process data
-df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = fetch_and_process_data()
+# Load or fetch data
+data, last_updated = load_or_fetch_data()
+df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
 
 if df_projects is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
@@ -25,7 +26,13 @@ app = dash.Dash(__name__)
 
 # Layout
 app.layout = html.Div([
-    html.H1("Odoo Interactive Dashboard"),
+    html.Div([
+        html.H1("Odoo Interactive Dashboard", style={'display': 'inline-block'}),
+        html.Div([
+            html.Button('Refresh Data', id='refresh-data', n_clicks=0),
+            html.Span(id='last-update-time', style={'margin-left': '10px'})
+        ], style={'float': 'right', 'margin-top': '20px'})
+    ]),
     
     # Date range selector
     dcc.DatePickerRange(
@@ -107,7 +114,10 @@ app.layout = html.Div([
                 html.Div(id='llm-report-output')
             ])
         ]),
-    ])
+    ]),
+
+    # Store for holding the current data
+    dcc.Store(id='data-store')
 ])
 
 # Register callbacks
