@@ -434,8 +434,11 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 name=employee,
                 x=task_employee_hours.index,
                 y=task_employee_hours[employee],
-                text=task_employee_hours[employee].round(2),
-                textposition='auto'
+                text=task_employee_hours[employee].round().astype(int),
+                textposition='auto',
+                hovertemplate='<b>%{x}</b><br>' +
+                              f'<b>{employee}</b>: ' +
+                              '%{text} hours<extra></extra>'
             ))
 
         fig.update_layout(
@@ -451,9 +454,14 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 xanchor="left",
                 x=1.02
             ),
-            height=600,
-            margin=dict(r=200),  # Add right margin to accommodate the legend
-            xaxis=dict(tickangle=45)  # Rotate x-axis labels for better readability
+            height=1000,
+            margin=dict(r=200, b=100, t=50),  # Increased bottom margin for rotated labels
+            xaxis=dict(
+                tickangle=45,  # Rotate x-axis
+                tickmode='array',
+                tickvals=list(range(len(task_employee_hours.index))),
+                ticktext=task_employee_hours.index
+            )
         )
 
         return fig
