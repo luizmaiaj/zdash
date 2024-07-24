@@ -54,6 +54,10 @@ def merge_new_data(old_data, new_data):
         old_df = old_df.reindex(columns=all_columns)
         new_df = new_df.reindex(columns=all_columns)
         
+        # Remove empty or all-NA columns before concatenation
+        old_df = old_df.dropna(axis=1, how='all')
+        new_df = new_df.dropna(axis=1, how='all')
+        
         if 'id' in old_df.columns and 'id' in new_df.columns:
             merged_df = pd.concat([old_df, new_df], ignore_index=True).drop_duplicates(subset='id', keep='last')
         else:
@@ -95,27 +99,31 @@ def load_or_fetch_data():
     return cached_data, last_update
 
 def refresh_data():
-    print("Forcing data refresh...")
     last_update = get_last_update_time()
     current_time = datetime.now()
     
-    if last_update:
-        # Fetch data from last update minus 3 hours to ensure overlap
-        new_data = fetch_and_process_data(last_update - timedelta(hours=3))
-    else:
-        new_data = fetch_and_process_data()
-    
-    if new_data and all(df is not None for df in new_data):
-        cached_data = load_cached_data()
-        if cached_data:
-            merged_data = merge_new_data(cached_data, new_data)
+    # Only refresh if data is older than 1 hour
+    if last_update is None or (current_time - last_update) > timedelta(hours=1):
+        print("Forcing data refresh...")
+        if last_update:
+            # Fetch data from last update minus 3 hours to ensure overlap
+            new_data = fetch_and_process_data(last_update - timedelta(hours=3))
         else:
-            merged_data = new_data
-        save_cached_data(merged_data)
-        set_last_update_time(current_time)
-        return merged_data, current_time
+            new_data = fetch_and_process_data()
+        
+        if new_data and all(df is not None for df in new_data):
+            cached_data = load_cached_data()
+            if cached_data:
+                merged_data = merge_new_data(cached_data, new_data)
+            else:
+                merged_data = new_data
+            save_cached_data(merged_data)
+            set_last_update_time(current_time)
+            return merged_data, current_time
+        else:
+            print("Error: Failed to fetch data during refresh. Using cached data if available.")
     else:
-        print("Error: Failed to fetch data during refresh. Using cached data if available.")
-        cached_data = load_cached_data()
-        last_update = get_last_update_time()
-        return cached_data if cached_data else [pd.DataFrame() for _ in range(6)], last_update or current_time
+        print("Data is up to date. Skipping refresh.")
+    
+    cached_data = load_cached_data()
+    return cached_data, last_update or current_time
