@@ -165,6 +165,8 @@ app.layout = html.Div([
         dcc.Tab(label='Settings', children=[
             html.Div([
                 html.H3("Job Titles and Costs"),
+                html.Button('Save Cost and Revenue', id='save-cost-revenue', n_clicks=0),
+                html.Button('Add Job Title', id='add-job-title', n_clicks=0),
                 html.Div([
                     dash_table.DataTable(
                         id='job-costs-table',
@@ -175,11 +177,23 @@ app.layout = html.Div([
                         ],
                         data=[{'job_title': jt, 'cost': data.get('cost', ''), 'revenue': data.get('revenue', '')} 
                               for jt, data in job_costs.items() if jt],
+                        style_table={'height': '300px', 'overflowY': 'auto'},
+                        style_header={
+                            'backgroundColor': 'rgb(230, 230, 230)',
+                            'fontWeight': 'bold'
+                        },
                         editable=True,
-                        row_deletable=True
+                        row_deletable=True,
+                        style_cell={
+                            'textAlign': 'left'
+                        },
+                        style_cell_conditional=[
+                            {
+                                'if': {'column_id': 'job_title'},
+                                'textAlign': 'left'
+                            }
+                        ]
                     ),
-                    html.Button('Add Job Title', id='add-job-title', n_clicks=0),
-                    html.Button('Save Job Costs', id='save-job-costs', n_clicks=0)
                 ]),
                 html.Div(id='job-costs-save-status'),
                 html.H3("Employees and Job Titles"),

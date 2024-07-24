@@ -637,24 +637,24 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
 
     @app.callback(
         Output('job-costs-table', 'data'),
-        Input('add-job-title', 'n_clicks'),
-        State('job-costs-table', 'data'),
-        prevent_initial_call=True
-    )
-    def add_job_title(n_clicks, rows):
-        if n_clicks > 0:
-            rows.append({'job_title': '', 'cost': '', 'revenue': ''})
-        return rows
-
-    @app.callback(
         Output('job-costs-save-status', 'children'),
-        Input('save-job-costs', 'n_clicks'),
-        State('job-costs-table', 'data'),
+        [Input('save-cost-revenue', 'n_clicks'),
+        Input('add-job-title', 'n_clicks')],
+        [State('job-costs-table', 'data')],
         prevent_initial_call=True
     )
-    def save_job_costs_callback(n_clicks, rows):
-        if n_clicks > 0:
-            job_costs = {row['job_title']: {'cost': row['cost'], 'revenue': row['revenue']} for row in rows if row['job_title']}
-            save_job_costs(job_costs)
-            return "Job costs saved successfully!"
-        return ""
+    def update_job_costs(save_cost_clicks, add_job_clicks, table_data):
+        ctx = dash.callback_context
+        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        
+        if triggered_id == 'save-cost-revenue':
+            updated_job_costs = {row['job_title']: {'cost': row['cost'], 'revenue': row['revenue']} 
+                                for row in table_data if row['job_title']}
+            save_job_costs(updated_job_costs)
+            return table_data, "Cost and revenue data saved successfully!"
+        
+        elif triggered_id == 'add-job-title':
+            table_data.append({'job_title': '', 'cost': '', 'revenue': ''})
+            return table_data, "New job title row added. Don't forget to save your changes!"
+        
+        return table_data, ""
