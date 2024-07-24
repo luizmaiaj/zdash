@@ -1,5 +1,6 @@
 import dash
 from dash import dcc, html, dash_table
+import ast
 from datetime import datetime, timedelta
 import pandas as pd
 from callbacks import register_callbacks
@@ -12,9 +13,28 @@ df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = dat
 
 job_costs = load_job_costs()
 
-# Function to safely get DataFrame columns
+# Function to safely get DataFrame columns and process job_id
 def safe_get_columns(df, columns):
-    return df[[col for col in columns if col in df.columns]]
+    result = df[[col for col in columns if col in df.columns]].copy()
+    if 'job_id' in result.columns:
+        result['job_id_original'] = result['job_id']
+        result['job_id'] = result['job_id_original'].apply(
+            lambda x: ast.literal_eval(str(x))[0] if isinstance(x, (list, str)) and str(x).startswith('[') else x
+        )
+        result['job_title'] = result['job_id_original'].apply(
+            lambda x: ast.literal_eval(str(x))[1] if isinstance(x, (list, str)) and str(x).startswith('[') else ''
+        )
+        result.drop('job_id_original', axis=1, inplace=True)
+    return result
+
+# Process df_employees to extract job titles
+df_employees_processed = safe_get_columns(df_employees, ['name', 'job_id', 'job_title'])
+unique_job_titles = df_employees_processed['job_title'].unique()
+
+# Update job_costs with new job titles if they don't exist
+for title in unique_job_titles:
+    if title and title not in job_costs:
+        job_costs[title] = {'cost': '', 'revenue': ''}
 
 if df_projects is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
@@ -154,7 +174,7 @@ app.layout = html.Div([
                             {'name': 'Revenue (USD/day)', 'id': 'revenue'}
                         ],
                         data=[{'job_title': jt, 'cost': data.get('cost', ''), 'revenue': data.get('revenue', '')} 
-                            for jt, data in job_costs.items()],
+                              for jt, data in job_costs.items() if jt],
                         editable=True,
                         row_deletable=True
                     ),
@@ -171,7 +191,7 @@ app.layout = html.Div([
                             {'name': 'Job ID', 'id': 'job_id'},
                             {'name': 'Job Title', 'id': 'job_title'}
                         ],
-                        data=safe_get_columns(df_employees, ['name', 'job_id', 'job_title']).to_dict('records'),
+                        data=df_employees_processed.to_dict('records'),
                         style_table={'height': '300px', 'overflowY': 'auto'},
                         style_cell={'textAlign': 'left'},
                         style_header={
