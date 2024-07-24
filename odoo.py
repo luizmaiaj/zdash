@@ -23,7 +23,7 @@ def fetch_odoo_data(model, fields, domain=[], limit=None):
         cleaned_result = [{k: v for k, v in record.items() if v is not None} for record in result]
         return cleaned_result
     except Exception as err:
-        print(f"Error fetching data from Odoo: {err}")
+        print(f"Error fetching data from Odoo, model {model}, fields {fields}, domain {domain}, limit {limit}: {err}")
         return []
 
 def validate_dataframe(df, required_columns):
@@ -61,6 +61,14 @@ def fetch_and_process_data(last_update=None):
         df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
         df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
 
+        # Print column names for debugging
+        print("df_projects columns:", df_projects.columns)
+        print("df_employees columns:", df_employees.columns)
+        print("df_sales columns:", df_sales.columns)
+        print("df_financials columns:", df_financials.columns)
+        print("df_timesheet columns:", df_timesheet.columns)
+        print("df_tasks columns:", df_tasks.columns)
+
         # Convert date columns to datetime
         date_columns = {
             'df_projects': ['date_start', 'date'],
@@ -73,7 +81,8 @@ def fetch_and_process_data(last_update=None):
         for df_name, columns in date_columns.items():
             df = locals()[df_name]
             for col in columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
 
         # Apply extract_id function to relevant columns
         df_timesheet['project_id'] = df_timesheet['project_id'].apply(extract_id)
@@ -81,13 +90,16 @@ def fetch_and_process_data(last_update=None):
         df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
 
         # Create dictionaries to map IDs to names
-        project_id_to_name = dict(zip(df_projects['id'], df_projects['name']))
-        employee_id_to_name = dict(zip(df_employees['id'], df_employees['name']))
+        project_id_to_name = dict(zip(df_projects['id'], df_projects['name'])) if 'id' in df_projects.columns and 'name' in df_projects.columns else {}
+        employee_id_to_name = dict(zip(df_employees['id'], df_employees['name'])) if 'id' in df_employees.columns and 'name' in df_employees.columns else {}
 
         # Map IDs to names in timesheet and tasks DataFrames
-        df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
-        df_timesheet['employee_name'] = df_timesheet['employee_id'].map(employee_id_to_name)
-        df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
+        if 'project_id' in df_timesheet.columns:
+            df_timesheet['project_name'] = df_timesheet['project_id'].map(project_id_to_name)
+        if 'employee_id' in df_timesheet.columns:
+            df_timesheet['employee_name'] = df_timesheet['employee_id'].map(employee_id_to_name)
+        if 'project_id' in df_tasks.columns:
+            df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
 
         return df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks
     except Exception as e:

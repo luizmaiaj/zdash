@@ -14,6 +14,9 @@ if df_projects is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
     exit(1)
 
+# Print column names for debugging
+print("df_projects columns:", df_projects.columns)
+
 # Get available models
 ollama_running, available_models = check_ollama_status()
 if ollama_running:
@@ -23,6 +26,14 @@ else:
 
 # Initialize Dash app
 app = dash.Dash(__name__)
+
+# Function to safely get unique values from a DataFrame column
+def safe_unique_values(df, column_name):
+    if column_name in df.columns:
+        return [{'label': i, 'value': i} for i in sorted(df[column_name].unique()) if pd.notna(i)]
+    else:
+        print(f"Warning: '{column_name}' column not found in DataFrame")
+        return []
 
 # Layout
 app.layout = html.Div([
@@ -44,7 +55,7 @@ app.layout = html.Div([
     # Project filter
     dcc.Dropdown(
         id='project-filter',
-        options=[{'label': i, 'value': i} for i in sorted(df_projects['name'].unique()) if pd.notna(i)],
+        options=safe_unique_values(df_projects, 'name'),
         multi=True,
         placeholder="Select projects"
     ),
@@ -52,7 +63,7 @@ app.layout = html.Div([
     # Employee filter
     dcc.Dropdown(
         id='employee-filter',
-        options=[{'label': i, 'value': i} for i in sorted(df_employees['name'].unique()) if pd.notna(i)],
+        options=safe_unique_values(df_employees, 'name'),
         multi=True,
         placeholder="Select employees"
     ),
@@ -85,7 +96,7 @@ app.layout = html.Div([
             html.Div([
                 dcc.Dropdown(
                     id='project-selector',
-                    options=[{'label': i, 'value': i} for i in sorted(df_projects['name'].unique()) if pd.notna(i)],
+                    options=safe_unique_values(df_projects, 'name'),
                     placeholder="Select a project"
                 ),
                 dcc.Graph(id='project-tasks-employees-chart')
@@ -122,7 +133,7 @@ app.layout = html.Div([
                     html.Button('Generate LLM Report', id='generate-llm-report', n_clicks=0),
                 ]),
                 html.Div(id='llm-report-output'),
-                html.Div(id='long-tasks-list')  # Add this line
+                html.Div(id='long-tasks-list')
             ])
         ]),
     ], id='tabs'),

@@ -10,15 +10,21 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
 
     @app.callback(
         [Output('data-store', 'data'),
-         Output('last-update-time', 'children')],
+        Output('last-update-time', 'children')],
         [Input('refresh-data', 'n_clicks')],
         [State('data-store', 'data')]
     )
     def refresh_dashboard_data(n_clicks, current_data):
         if n_clicks > 0 or current_data is None:
             data, last_updated = refresh_data()
-            serialized_data = serialize_dataframes(data)
-            return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+            if data:
+                serialized_data = serialize_dataframes(data)
+                return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+            else:
+                # If refresh failed and we don't have current data, return empty DataFrames
+                empty_data = [pd.DataFrame() for _ in range(6)]
+                serialized_empty_data = serialize_dataframes(empty_data)
+                return serialized_empty_data, "Failed to update data"
         else:
             last_updated = get_last_update_time()
             return current_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -63,36 +69,41 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
 
     @app.callback(
         [Output('global-map', 'figure'),
-         Output('global-kpi-chart', 'figure')],
+        Output('global-kpi-chart', 'figure')],
         [Input('date-range', 'start_date'),
-         Input('date-range', 'end_date'),
-         Input('project-filter', 'value'),
-         Input('employee-filter', 'value')]
+        Input('date-range', 'end_date'),
+        Input('project-filter', 'value'),
+        Input('employee-filter', 'value')]
     )
     def update_global_kpi(start_date, end_date, selected_projects, selected_employees):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
-        filtered_projects = df_projects[
-            (df_projects['date_start'] >= start_date) &
-            (df_projects['date_start'] <= end_date)
-        ]
-        if selected_projects:
+        filtered_projects = df_projects.copy()
+        if 'date_start' in df_projects.columns:
+            filtered_projects = filtered_projects[
+                (filtered_projects['date_start'] >= start_date) &
+                (filtered_projects['date_start'] <= end_date)
+            ]
+        if selected_projects and 'name' in filtered_projects.columns:
             filtered_projects = filtered_projects[filtered_projects['name'].isin(selected_projects)]
         
         if filtered_projects.empty:
             return go.Figure(), go.Figure()
         
-        fig_map = go.Figure(go.Scattergeo(
-            locations=filtered_projects['partner_id'],
-            text=filtered_projects['name'],
-            mode='markers',
-            marker=dict(
-                size=10,
-                color='blue',
-                line=dict(width=3, color='rgba(68, 68, 68, 0)')
-            )
-        ))
+        # Create map figure
+        fig_map = go.Figure()
+        if 'partner_id' in filtered_projects.columns and 'name' in filtered_projects.columns:
+            fig_map.add_trace(go.Scattergeo(
+                locations=filtered_projects['partner_id'],
+                text=filtered_projects['name'],
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color='blue',
+                    line=dict(width=3, color='rgba(68, 68, 68, 0)')
+                )
+            ))
         fig_map.update_layout(
             title='Project Locations',
             geo=dict(
@@ -106,11 +117,13 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
             )
         )
         
-        project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
-        project_counts['date_start'] = project_counts['date_start'].astype(str)
-        
-        fig_kpi = go.Figure(go.Bar(x=project_counts['date_start'], y=project_counts['count']))
-        fig_kpi.update_layout(title='Projects by Month', xaxis_title='Month', yaxis_title='Number of Projects')
+        # Create KPI chart
+        fig_kpi = go.Figure()
+        if 'date_start' in filtered_projects.columns:
+            project_counts = filtered_projects.groupby(filtered_projects['date_start'].dt.to_period('M')).size().reset_index(name='count')
+            project_counts['date_start'] = project_counts['date_start'].astype(str)
+            fig_kpi.add_trace(go.Bar(x=project_counts['date_start'], y=project_counts['count']))
+            fig_kpi.update_layout(title='Projects by Month', xaxis_title='Month', yaxis_title='Number of Projects')
         
         return fig_map, fig_kpi
 
@@ -279,9 +292,12 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 yanchor="top",
                 y=1,
                 xanchor="left",
-                x=1.02
+                x=1,
+                bgcolor="rgba(255, 255, 255, 0.5)",
+                bordercolor="rgba(0, 0, 0, 0.2)",
+                borderwidth=1
             ),
-            margin=dict(r=200, b=100),  # Increased bottom margin for x-axis labels
+            margin=dict(r=250, b=100),  # Increased right margin to accommodate the legend
             xaxis=dict(
                 tickangle=45,  # Angled labels for better readability
                 automargin=True  # Automatically adjust margins to fit labels
@@ -381,10 +397,16 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         report = []
         
         # Check for projects with no hours logged
-        projects_without_hours = set(df_projects['name']) - set(df_timesheet['project_name'])
+        if 'name' in df_projects.columns and 'project_name' in df_timesheet.columns:
+            projects_without_hours = set(df_projects['name']) - set(df_timesheet['project_name'])
+        else:
+            projects_without_hours = set()
         
         # Check for employees with no hours logged
-        employees_without_hours = set(df_employees['name']) - set(df_timesheet['employee_name'])
+        if 'name' in df_employees.columns and 'employee_name' in df_timesheet.columns:
+            employees_without_hours = set(df_employees['name']) - set(df_timesheet['employee_name'])
+        else:
+            employees_without_hours = set()
         
         # Create side-by-side scrollable lists
         report.append(html.Div([
@@ -404,11 +426,12 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         ]))
         
         # Check for inconsistent project status (closed projects with open tasks)
-        closed_projects = df_projects[df_projects['active'] == False]['name']
-        open_tasks = df_tasks[df_tasks['date_end'].isna()]['project_name']
-        inconsistent_projects = set(closed_projects) & set(open_tasks)
-        if inconsistent_projects:
-            report.append(html.P(f"Closed projects with open tasks: {', '.join(inconsistent_projects)}"))
+        if 'active' in df_projects.columns and 'name' in df_projects.columns and 'date_end' in df_tasks.columns and 'project_name' in df_tasks.columns:
+            closed_projects = df_projects[df_projects['active'] == False]['name']
+            open_tasks = df_tasks[df_tasks['date_end'].isna()]['project_name']
+            inconsistent_projects = set(closed_projects) & set(open_tasks)
+            if inconsistent_projects:
+                report.append(html.P(f"Closed projects with open tasks: {', '.join(inconsistent_projects)}"))
         
         # Suggestions for improvement
         report.append(html.H4("Suggestions for improvement:"))
