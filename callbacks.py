@@ -2,10 +2,11 @@ from dash.dependencies import Input, Output, State
 from dash import html, dash_table
 import plotly.graph_objs as go
 import ast
+import dash
 import pandas as pd
 from datetime import datetime
 from llm_integration import generate_llm_report
-from data_management import refresh_data, get_last_update_time, serialize_dataframes, deserialize_dataframes
+from data_management import refresh_data, load_or_fetch_data, serialize_dataframes, deserialize_dataframes
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
 
@@ -16,19 +17,22 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         [State('data-store', 'data')]
     )
     def refresh_dashboard_data(n_clicks, current_data):
-        if n_clicks > 0 or current_data is None:
-            data, last_updated = refresh_data()
-            if data:
-                serialized_data = serialize_dataframes(data)
-                return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
-            else:
-                # If refresh failed and we don't have current data, return empty DataFrames
-                empty_data = [pd.DataFrame() for _ in range(6)]
-                serialized_empty_data = serialize_dataframes(empty_data)
-                return serialized_empty_data, "Failed to update data"
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            # Initial load
+            data, last_updated = load_or_fetch_data(force=False)
         else:
-            last_updated = get_last_update_time()
-            return current_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+            # Button click, force refresh
+            data, last_updated = refresh_data(force=True)
+        
+        if data:
+            serialized_data = serialize_dataframes(data)
+            return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+        else:
+            # If refresh failed and we don't have current data, return empty DataFrames
+            empty_data = [pd.DataFrame() for _ in range(6)]
+            serialized_empty_data = serialize_dataframes(empty_data)
+            return serialized_empty_data, "Failed to update data"
 
     @app.callback(
         [Output('project-filter', 'options'),
