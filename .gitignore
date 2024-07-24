@@ -1,3 +1,4 @@
 .env
 *.pyc
 *.pkl
+last_update.json
