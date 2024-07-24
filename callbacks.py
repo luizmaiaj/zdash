@@ -467,7 +467,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         [Input('tabs', 'value')]
     )
     def disable_project_filter(tab):
-        return tab == 'project-tab'
+        return tab in ['project-tab', 'Settings']
 
     @app.callback(
         Output('project-tasks-employees-chart', 'figure'),
@@ -636,25 +636,25 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         ])
 
     @app.callback(
-        Output('job-costs-table', 'data'),
-        Output('job-costs-save-status', 'children'),
-        [Input('save-cost-revenue', 'n_clicks'),
-        Input('add-job-title', 'n_clicks')],
-        [State('job-costs-table', 'data')],
-        prevent_initial_call=True
+        [Output('job-costs-table', 'data'),
+         Output('employees-job-titles-table', 'data')],
+        [Input('employee-filter', 'value'),
+         Input('tabs', 'value')],
+        [State('job-costs-table', 'data'),
+         State('employees-job-titles-table', 'data')]
     )
-    def update_job_costs(save_cost_clicks, add_job_clicks, table_data):
-        ctx = dash.callback_context
-        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    def filter_settings_tables(selected_employees, current_tab, job_costs_data, employees_data):
+        if current_tab != 'Settings':
+            return dash.no_update, dash.no_update
+
+        if not selected_employees:
+            return job_costs_data, employees_data
+
+        filtered_employees = [emp for emp in employees_data if emp['name'] in selected_employees]
         
-        if triggered_id == 'save-cost-revenue':
-            updated_job_costs = {row['job_title']: {'cost': row['cost'], 'revenue': row['revenue']} 
-                                for row in table_data if row['job_title']}
-            save_job_costs(updated_job_costs)
-            return table_data, "Cost and revenue data saved successfully!"
+        # Get unique job titles from filtered employees
+        unique_job_titles = set(emp['job_title'] for emp in filtered_employees if emp['job_title'])
         
-        elif triggered_id == 'add-job-title':
-            table_data.append({'job_title': '', 'cost': '', 'revenue': ''})
-            return table_data, "New job title row added. Don't forget to save your changes!"
-        
-        return table_data, ""
+        filtered_job_costs = [cost for cost in job_costs_data if cost['job_title'] in unique_job_titles]
+
+        return filtered_job_costs, filtered_employees

@@ -162,8 +162,15 @@ app.layout = html.Div([
                 html.Div(id='long-tasks-list')
             ])
         ]),
-        dcc.Tab(label='Settings', children=[
+        dcc.Tab(label='Settings', value='Settings', children=[
             html.Div([
+                html.H3("Filter"),
+                dcc.Dropdown(
+                    id='employee-filter',
+                    options=safe_unique_values(df_employees, 'name'),
+                    multi=True,
+                    placeholder="Select employees"
+                ),
                 html.H3("Job Titles and Costs"),
                 html.Button('Save Cost and Revenue', id='save-cost-revenue', n_clicks=0),
                 html.Button('Add Job Title', id='add-job-title', n_clicks=0),
