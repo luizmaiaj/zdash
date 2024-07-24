@@ -1,10 +1,11 @@
+# In data_management.py
+
 import os
-import pandas as pd
 import pickle
 import json
 from datetime import datetime, timedelta
-from odoo import fetch_and_process_data
 import pandas as pd
+from odoo import fetch_and_process_data
 
 DATA_FILE = 'odoo_data.pkl'
 LAST_UPDATE_FILE = 'last_update.json'
@@ -26,74 +27,95 @@ def set_last_update_time(time):
     with open(LAST_UPDATE_FILE, 'w') as f:
         json.dump({'time': time.isoformat()}, f)
 
-def load_or_fetch_data():
-    last_update = get_last_update_time()
-    current_time = datetime.now()
-
-    if last_update is None or (current_time - last_update) > timedelta(hours=1) or not os.path.exists(DATA_FILE):
-        print("Fetching new data from Odoo...")
-        new_data = fetch_and_process_data()
-        
-        if new_data and all(df is not None for df in new_data):
-            with open(DATA_FILE, 'wb') as f:
-                pickle.dump(serialize_dataframes(new_data), f)
-            set_last_update_time(current_time)
-            return new_data, current_time
-        else:
-            print("Error: Failed to fetch valid data from Odoo.")
-            return load_cached_data(last_update)
-    else:
-        print("Loading data from cache...")
-        return load_cached_data(last_update)
-
-def load_cached_data(last_update):
+def load_cached_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'rb') as f:
             data = pickle.load(f)
-        deserialized_data = deserialize_dataframes(data)
+        return deserialize_dataframes(data)
+    return None
+
+def save_cached_data(data):
+    with open(DATA_FILE, 'wb') as f:
+        pickle.dump(serialize_dataframes(data), f)
+
+def merge_new_data(old_data, new_data):
+    merged_data = []
+    for old_df, new_df in zip(old_data, new_data):
+        # Convert list columns to strings to make them hashable
+        for col in old_df.columns:
+            if old_df[col].dtype == 'object':
+                old_df[col] = old_df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
+        for col in new_df.columns:
+            if new_df[col].dtype == 'object':
+                new_df[col] = new_df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
         
-        # Validate the deserialized data
-        if all(isinstance(df, pd.DataFrame) for df in deserialized_data):
-            print("Successfully loaded data from cache.")
-            return deserialized_data, last_update
+        # Ensure both DataFrames have the same columns
+        all_columns = list(set(old_df.columns) | set(new_df.columns))
+        old_df = old_df.reindex(columns=all_columns)
+        new_df = new_df.reindex(columns=all_columns)
+        
+        if 'id' in old_df.columns and 'id' in new_df.columns:
+            merged_df = pd.concat([old_df, new_df], ignore_index=True).drop_duplicates(subset='id', keep='last')
         else:
-            print("Error: Invalid data format in cache.")
+            merged_df = pd.concat([old_df, new_df], ignore_index=True).drop_duplicates()
+        merged_data.append(merged_df)
+    return merged_data
+
+def load_or_fetch_data():
+    cached_data = load_cached_data()
+    last_update = get_last_update_time()
+    current_time = datetime.now()
+
+    if cached_data is None or last_update is None:
+        print("No cached data found. Fetching all data...")
+        new_data = fetch_and_process_data()
+        if new_data and all(df is not None for df in new_data):
+            save_cached_data(new_data)
+            set_last_update_time(current_time)
+            return new_data, current_time
+        else:
+            print("Error: Failed to fetch data.")
+            return [pd.DataFrame() for _ in range(6)], current_time
+
+    print(f"Loading cached data from {last_update}")
     
-    print("No valid cached data available. Initializing with empty DataFrames.")
-    return [pd.DataFrame() for _ in range(6)], datetime.now()
-
-def update_existing_data(existing_data, new_data):
-    """
-    Update existing data with new data, handling potential new records and updates.
-    """
-    updated_data = []
-    for existing_df, new_df in zip(existing_data, new_data):
-        if existing_df is not None and new_df is not None:
-            if 'id' in existing_df.columns and 'id' in new_df.columns:
-                # Merge based on 'id' column if it exists
-                merged_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='id', keep='last')
-            else:
-                # If no 'id' column, just append new data
-                merged_df = pd.concat([existing_df, new_df]).drop_duplicates()
-            updated_data.append(merged_df)
-        elif new_df is not None:
-            # If existing_df is None, use the new_df
-            updated_data.append(new_df)
+    # Check if data is older than 1 day
+    if (current_time - last_update) > timedelta(days=1):
+        print("Cached data is older than 1 day. Fetching incremental update...")
+        # Fetch data from last update minus 3 hours to ensure overlap
+        new_data = fetch_and_process_data(last_update - timedelta(hours=3))
+        if new_data and all(df is not None for df in new_data):
+            merged_data = merge_new_data(cached_data, new_data)
+            save_cached_data(merged_data)
+            set_last_update_time(current_time)
+            return merged_data, current_time
         else:
-            # If both are None or only existing_df exists, append existing_df (or None)
-            updated_data.append(existing_df)
-    return updated_data
+            print("Error: Failed to fetch incremental update. Using cached data.")
+    
+    return cached_data, last_update
 
-# Update the refresh_data function similarly
 def refresh_data():
     print("Forcing data refresh...")
-    new_data = fetch_and_process_data()
-    if new_data and all(df is not None for df in new_data):
-        with open(DATA_FILE, 'wb') as f:
-            pickle.dump(serialize_dataframes(new_data), f)
-        current_time = datetime.now()
-        set_last_update_time(current_time)
-        return new_data, current_time
+    last_update = get_last_update_time()
+    current_time = datetime.now()
+    
+    if last_update:
+        # Fetch data from last update minus 3 hours to ensure overlap
+        new_data = fetch_and_process_data(last_update - timedelta(hours=3))
     else:
-        print("Error: Failed to fetch valid data during refresh.")
-        return load_cached_data(get_last_update_time())
+        new_data = fetch_and_process_data()
+    
+    if new_data and all(df is not None for df in new_data):
+        cached_data = load_cached_data()
+        if cached_data:
+            merged_data = merge_new_data(cached_data, new_data)
+        else:
+            merged_data = new_data
+        save_cached_data(merged_data)
+        set_last_update_time(current_time)
+        return merged_data, current_time
+    else:
+        print("Error: Failed to fetch data during refresh. Using cached data if available.")
+        cached_data = load_cached_data()
+        last_update = get_last_update_time()
+        return cached_data if cached_data else [pd.DataFrame() for _ in range(6)], last_update or current_time
