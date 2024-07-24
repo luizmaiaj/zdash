@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 import pickle
 import json
 from datetime import datetime, timedelta
@@ -9,10 +10,10 @@ DATA_FILE = 'odoo_data.pkl'
 LAST_UPDATE_FILE = 'last_update.json'
 
 def serialize_dataframes(data):
-    return [df.to_dict(orient='records') for df in data]
+    return [df.to_dict(orient='records') if not df.empty else {} for df in data]
 
 def deserialize_dataframes(data):
-    return [pd.DataFrame(df_data) for df_data in data]
+    return [pd.DataFrame(df_data) if df_data else pd.DataFrame() for df_data in data]
 
 def get_last_update_time():
     if os.path.exists(LAST_UPDATE_FILE):
@@ -40,19 +41,26 @@ def load_or_fetch_data():
             return new_data, current_time
         else:
             print("Error: Failed to fetch valid data from Odoo.")
-            if os.path.exists(DATA_FILE):
-                print("Loading last saved data...")
-                with open(DATA_FILE, 'rb') as f:
-                    data = pickle.load(f)
-                return deserialize_dataframes(data), last_update
-            else:
-                print("No saved data available. Initializing with empty DataFrames.")
-                return [pd.DataFrame() for _ in range(6)], current_time
+            return load_cached_data(last_update)
     else:
         print("Loading data from cache...")
+        return load_cached_data(last_update)
+
+def load_cached_data(last_update):
+    if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'rb') as f:
             data = pickle.load(f)
-        return deserialize_dataframes(data), last_update
+        deserialized_data = deserialize_dataframes(data)
+        
+        # Validate the deserialized data
+        if all(isinstance(df, pd.DataFrame) for df in deserialized_data):
+            print("Successfully loaded data from cache.")
+            return deserialized_data, last_update
+        else:
+            print("Error: Invalid data format in cache.")
+    
+    print("No valid cached data available. Initializing with empty DataFrames.")
+    return [pd.DataFrame() for _ in range(6)], datetime.now()
 
 def update_existing_data(existing_data, new_data):
     """
@@ -76,6 +84,7 @@ def update_existing_data(existing_data, new_data):
             updated_data.append(existing_df)
     return updated_data
 
+# Update the refresh_data function similarly
 def refresh_data():
     print("Forcing data refresh...")
     new_data = fetch_and_process_data()
@@ -86,14 +95,5 @@ def refresh_data():
         set_last_update_time(current_time)
         return new_data, current_time
     else:
-        print("Error: Failed to fetch valid data during refresh. Loading last saved data...")
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, 'rb') as f:
-                data = pickle.load(f)
-            last_update = get_last_update_time()
-            return deserialize_dataframes(data), last_update
-        else:
-            print("No saved data available. Initializing with empty DataFrames.")
-            empty_data = [pd.DataFrame() for _ in range(6)]
-            current_time = datetime.now()
-            return empty_data, current_time
+        print("Error: Failed to fetch valid data during refresh.")
+        return load_cached_data(get_last_update_time())
