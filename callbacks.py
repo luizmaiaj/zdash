@@ -1,6 +1,7 @@
 from dash.dependencies import Input, Output, State
-from dash import html
+from dash import html, dash_table
 import plotly.graph_objs as go
+import ast
 import pandas as pd
 from datetime import datetime
 from llm_integration import generate_llm_report
@@ -558,23 +559,62 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         # Sort by hours descending
         long_timesheets = long_timesheets.sort_values('unit_amount', ascending=False)
 
-        # Create the list items
-        list_items = []
-        for _, row in long_timesheets.iterrows():
-            employee_name = row['employee_name']
-            project_name = row['project_name']
-            task_id = row['task_id']
-            hours = row['unit_amount']
-            date = row['date'].strftime('%Y-%m-%d')
-            list_items.append(html.Li(f"{employee_name} - {project_name} (Task ID: {task_id}) on {date}: {hours:.2f} hours"))
+        # Merge with tasks to get task names
+        long_timesheets['task_id'] = long_timesheets['task_id'].astype(str)
+        df_tasks['id'] = df_tasks['id'].astype(str)
+        merged_data = pd.merge(long_timesheets, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
 
-        if not list_items:
+        # Function to safely extract task name
+        def extract_task_name(task_id):
+            try:
+                return ast.literal_eval(task_id)[1] if isinstance(task_id, str) and task_id.startswith('[') else task_id
+            except:
+                return task_id
+
+        # Prepare the data for the table
+        table_data = merged_data[['employee_name', 'project_name', 'task_id', 'name', 'date', 'unit_amount']].rename(columns={
+            'name': 'task_name',
+            'date': 'created_on',
+            'unit_amount': 'duration'
+        })
+
+        # Extract task name from task_id if necessary
+        table_data['task_name'] = table_data['task_name'].fillna(table_data['task_id'].apply(extract_task_name))
+        table_data['task_id'] = table_data['task_id'].apply(lambda x: ast.literal_eval(x)[0] if isinstance(x, str) and x.startswith('[') else x)
+
+        # Round duration to 2 decimal places
+        table_data['duration'] = table_data['duration'].round(2)
+
+        if table_data.empty:
             return html.Div("No timesheets longer than 8 hours found in the selected date range.")
 
+        # Create the sortable table
         return html.Div([
             html.H4("Timesheets Longer Than 8 Hours:"),
-            html.Div(
-                html.Ul(list_items),
-                style={'max-height': '400px', 'overflow-y': 'auto', 'border': '1px solid #ddd', 'padding': '10px'}
+            dash_table.DataTable(
+                id='long-timesheets-table',
+                columns=[
+                    {"name": "Employee Name", "id": "employee_name"},
+                    {"name": "Project Name", "id": "project_name"},
+                    {"name": "Task Id", "id": "task_id"},
+                    {"name": "Task Name", "id": "task_name"},
+                    {"name": "Created On", "id": "created_on"},
+                    {"name": "Duration (Hours)", "id": "duration"}
+                ],
+                data=table_data.to_dict('records'),
+                sort_action='native',
+                sort_mode='multi',
+                style_table={'height': '400px', 'overflowY': 'auto'},
+                style_cell={'textAlign': 'left', 'padding': '10px'},
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
+                ]
             )
         ])
