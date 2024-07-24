@@ -107,7 +107,7 @@ app.layout = html.Div([
                 html.H3(id='total-hours'),
                 html.Div([
                     dcc.Graph(id='employee-hours-chart'),
-                    dcc.Input(id='employee-chart-height', type='number', placeholder='Min height (px)', value=400)
+                    dcc.Input(id='employee-chart-height', type='number', placeholder='Min height (px)', value=600)
                 ])
             ])
         ]),

@@ -297,23 +297,24 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 yanchor="top",
                 y=1,
                 xanchor="left",
-                x=1,
+                x=1.02,
                 bgcolor="rgba(255, 255, 255, 0.5)",
                 bordercolor="rgba(0, 0, 0, 0.2)",
-                borderwidth=1
+                borderwidth=1,
+                itemwidth=200,
             ),
-            margin=dict(r=250, b=100),  # Increased right margin to accommodate the legend
+            margin=dict(r=250, b=100, t=50, l=50),
             xaxis=dict(
-                tickangle=45,  # Angled labels for better readability
-                automargin=True  # Automatically adjust margins to fit labels
+                tickangle=45,
+                automargin=True
             )
         )
         
         # Make the chart horizontally scrollable
         fig.update_layout(
             xaxis=dict(
-                rangeslider=dict(visible=False),  # Remove the rangeslider
-                range=[0, 10],  # Show only first 10 employees initially
+                rangeslider=dict(visible=False),
+                range=[0, 20],  # Show first 20 employees initially
                 automargin=True
             ),
             updatemenus=[
@@ -321,11 +322,11 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                     type="buttons",
                     direction="left",
                     buttons=[
-                        dict(args=[{"xaxis.range": [0, 10]}], label="Reset View", method="relayout"),
+                        dict(args=[{"xaxis.range": [0, 20]}], label="Reset View", method="relayout"),  # Reset to show 20 employees
                     ],
                     pad={"r": 10, "t": 10},
                     showactive=False,
-                    x=0.11,
+                    x=0.01,
                     xanchor="left",
                     y=1.1,
                     yanchor="top"
@@ -530,7 +531,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 xanchor="left",
                 x=1.02
             ),
-            height=1000,
+            height=600,
             margin=dict(r=200, b=100, t=50),
             xaxis=dict(
                 tickangle=45,
