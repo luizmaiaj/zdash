@@ -274,14 +274,23 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         
         total_hours = employee_hours['unit_amount'].sum()
         
+        # Sort employees alphabetically
+        sorted_employees = sorted(employee_hours['employee_name'].unique())
+        
         fig = go.Figure()
         for project in employee_hours['project_name'].unique():
             project_data = employee_hours[employee_hours['project_name'] == project]
+            
+            # Create a full dataset with all employees, fill missing values with 0
+            full_data = pd.DataFrame({'employee_name': sorted_employees})
+            full_data = full_data.merge(project_data, on='employee_name', how='left')
+            full_data['unit_amount'] = full_data['unit_amount'].fillna(0)
+            
             fig.add_trace(go.Bar(
-                x=project_data['employee_name'],
-                y=project_data['unit_amount'],
+                x=full_data['employee_name'],
+                y=full_data['unit_amount'],
                 name=project,
-                text=project_data['unit_amount'],
+                text=full_data['unit_amount'],
                 textposition='auto',
                 hovertemplate='<b>Employee:</b> %{x}<br><b>Project:</b> ' + project + '<br><b>Hours:</b> %{y}<extra></extra>'
             ))
@@ -301,12 +310,14 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 bgcolor="rgba(255, 255, 255, 0.5)",
                 bordercolor="rgba(0, 0, 0, 0.2)",
                 borderwidth=1,
-                itemwidth=200,
+                itemwidth=30,
             ),
             margin=dict(r=250, b=100, t=50, l=50),
             xaxis=dict(
                 tickangle=45,
-                automargin=True
+                automargin=True,
+                categoryorder='array',
+                categoryarray=sorted_employees
             )
         )
         
@@ -322,7 +333,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                     type="buttons",
                     direction="left",
                     buttons=[
-                        dict(args=[{"xaxis.range": [0, 20]}], label="Reset View", method="relayout"),  # Reset to show 20 employees
+                        dict(args=[{"xaxis.range": [0, 20]}], label="Reset View", method="relayout"),
                     ],
                     pad={"r": 10, "t": 10},
                     showactive=False,
