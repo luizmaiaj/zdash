@@ -6,7 +6,7 @@ import dash
 import pandas as pd
 from datetime import datetime
 from llm_integration import generate_llm_report
-from data_management import refresh_data, load_or_fetch_data, serialize_dataframes, deserialize_dataframes
+from data_management import save_job_costs, load_or_fetch_data, serialize_dataframes, deserialize_dataframes
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
 
@@ -23,7 +23,7 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
             data, last_updated = load_or_fetch_data(force=False)
         else:
             # Button click, force refresh
-            data, last_updated = refresh_data(force=True)
+            data, last_updated = load_or_fetch_data(force=True)
         
         if data:
             serialized_data = serialize_dataframes(data)
@@ -634,3 +634,27 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 ]
             )
         ])
+
+    @app.callback(
+        Output('job-costs-table', 'data'),
+        Input('add-job-title', 'n_clicks'),
+        State('job-costs-table', 'data'),
+        prevent_initial_call=True
+    )
+    def add_job_title(n_clicks, rows):
+        if n_clicks > 0:
+            rows.append({'job_title': '', 'cost': '', 'revenue': ''})
+        return rows
+
+    @app.callback(
+        Output('job-costs-save-status', 'children'),
+        Input('save-job-costs', 'n_clicks'),
+        State('job-costs-table', 'data'),
+        prevent_initial_call=True
+    )
+    def save_job_costs_callback(n_clicks, rows):
+        if n_clicks > 0:
+            job_costs = {row['job_title']: {'cost': row['cost'], 'revenue': row['revenue']} for row in rows if row['job_title']}
+            save_job_costs(job_costs)
+            return "Job costs saved successfully!"
+        return ""

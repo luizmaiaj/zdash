@@ -9,6 +9,7 @@ from odoo import fetch_and_process_data
 
 DATA_FILE = 'odoo_data.pkl'
 LAST_UPDATE_FILE = 'last_update.json'
+JOB_COSTS_FILE = 'job_costs.json'
 
 def serialize_dataframes(data):
     return [df.to_dict(orient='records') if not df.empty else {} for df in data]
@@ -65,6 +66,16 @@ def merge_new_data(old_data, new_data):
         merged_data.append(merged_df)
     return merged_data
 
+def load_job_costs():
+    if os.path.exists(JOB_COSTS_FILE):
+        with open(JOB_COSTS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_job_costs(job_costs):
+    with open(JOB_COSTS_FILE, 'w') as f:
+        json.dump(job_costs, f)
+
 def load_or_fetch_data(force=False):
     cached_data = load_cached_data()
     last_update = get_last_update_time()
@@ -83,10 +94,8 @@ def load_or_fetch_data(force=False):
 
     print(f"Loading cached data from {last_update}")
     
-    # Check if data is older than 1 day or if force refresh is requested
     if force or (current_time - last_update) > timedelta(days=1):
         print("Cached data is old or force refresh requested. Fetching update...")
-        # Fetch data from last update minus 3 hours to ensure overlap
         new_data = fetch_and_process_data(last_update - timedelta(hours=3))
         if new_data and all(df is not None for df in new_data):
             merged_data = merge_new_data(cached_data, new_data)
@@ -97,6 +106,3 @@ def load_or_fetch_data(force=False):
             print("Error: Failed to fetch update. Using cached data.")
     
     return cached_data, last_update
-
-def refresh_data(force=False):
-    return load_or_fetch_data(force)

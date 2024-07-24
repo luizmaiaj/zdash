@@ -1,14 +1,20 @@
 import dash
-from dash import dcc, html
+from dash import dcc, html, dash_table
 from datetime import datetime, timedelta
 import pandas as pd
 from callbacks import register_callbacks
 from llm_integration import check_ollama_status, extract_model_names
-from data_management import load_or_fetch_data, get_last_update_time
+from data_management import load_or_fetch_data, load_job_costs
 
 # Load or fetch data
 data, last_updated = load_or_fetch_data()
 df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
+
+job_costs = load_job_costs()
+
+# Function to safely get DataFrame columns
+def safe_get_columns(df, columns):
+    return df[[col for col in columns if col in df.columns]]
 
 if df_projects is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
@@ -136,6 +142,52 @@ app.layout = html.Div([
                 html.Div(id='long-tasks-list')
             ])
         ]),
+        dcc.Tab(label='Settings', children=[
+            html.Div([
+                html.H3("Job Titles and Costs"),
+                html.Div([
+                    dash_table.DataTable(
+                        id='job-costs-table',
+                        columns=[
+                            {'name': 'Job Title', 'id': 'job_title'},
+                            {'name': 'Cost (USD/day)', 'id': 'cost'},
+                            {'name': 'Revenue (USD/day)', 'id': 'revenue'}
+                        ],
+                        data=[{'job_title': jt, 'cost': data.get('cost', ''), 'revenue': data.get('revenue', '')} 
+                            for jt, data in job_costs.items()],
+                        editable=True,
+                        row_deletable=True
+                    ),
+                    html.Button('Add Job Title', id='add-job-title', n_clicks=0),
+                    html.Button('Save Job Costs', id='save-job-costs', n_clicks=0)
+                ]),
+                html.Div(id='job-costs-save-status'),
+                html.H3("Employees and Job Titles"),
+                html.Div([
+                    dash_table.DataTable(
+                        id='employees-job-titles-table',
+                        columns=[
+                            {'name': 'Employee Name', 'id': 'name'},
+                            {'name': 'Job ID', 'id': 'job_id'},
+                            {'name': 'Job Title', 'id': 'job_title'}
+                        ],
+                        data=safe_get_columns(df_employees, ['name', 'job_id', 'job_title']).to_dict('records'),
+                        style_table={'height': '300px', 'overflowY': 'auto'},
+                        style_cell={'textAlign': 'left'},
+                        style_header={
+                            'backgroundColor': 'rgb(230, 230, 230)',
+                            'fontWeight': 'bold'
+                        },
+                        style_data_conditional=[
+                            {
+                                'if': {'row_index': 'odd'},
+                                'backgroundColor': 'rgb(248, 248, 248)'
+                            }
+                        ]
+                    )
+                ])
+            ])
+        ])
     ], id='tabs'),
 
     # Store for holding the current data

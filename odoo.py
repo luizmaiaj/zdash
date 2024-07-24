@@ -47,7 +47,7 @@ def fetch_and_process_data(last_update=None):
 
         # Fetch necessary data
         projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'], domain=base_domain)
-        employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id'], domain=base_domain)
+        employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id', 'job_title'], domain=base_domain)
         sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'], domain=base_domain)
         financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'], domain=base_domain)
         timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'task_id', 'project_id', 'unit_amount', 'date'], domain=base_domain)
@@ -55,7 +55,7 @@ def fetch_and_process_data(last_update=None):
 
         # Convert to pandas DataFrames with data validation
         df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
-        df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id'])
+        df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id', 'job_title'])
         df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
         df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
         df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
