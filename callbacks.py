@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime
 from llm_integration import generate_llm_report
 from data_management import save_job_costs, load_or_fetch_data, serialize_dataframes, deserialize_dataframes
+import json
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks):
 
@@ -638,23 +639,27 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
     @app.callback(
         [Output('job-costs-table', 'data'),
          Output('employees-job-titles-table', 'data')],
-        [Input('employee-filter', 'value'),
+        [Input('date-range', 'start_date'),
+         Input('date-range', 'end_date'),
+         Input('project-filter', 'value'),
+         Input('employee-filter', 'value'),
          Input('tabs', 'value')],
         [State('job-costs-table', 'data'),
          State('employees-job-titles-table', 'data')]
     )
-    def filter_settings_tables(selected_employees, current_tab, job_costs_data, employees_data):
+    def update_settings_tables(start_date, end_date, selected_projects, selected_employees, current_tab, job_costs_data, employees_data):
         if current_tab != 'Settings':
             return dash.no_update, dash.no_update
 
-        if not selected_employees:
-            return job_costs_data, employees_data
+        # Filter employees data
+        filtered_employees = employees_data
+        if selected_employees:
+            filtered_employees = [emp for emp in employees_data if emp['name'] in selected_employees]
 
-        filtered_employees = [emp for emp in employees_data if emp['name'] in selected_employees]
-        
         # Get unique job titles from filtered employees
         unique_job_titles = set(emp['job_title'] for emp in filtered_employees if emp['job_title'])
-        
+
+        # Filter job costs data
         filtered_job_costs = [cost for cost in job_costs_data if cost['job_title'] in unique_job_titles]
 
         return filtered_job_costs, filtered_employees
