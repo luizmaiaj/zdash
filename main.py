@@ -3,7 +3,7 @@ from dash import dcc, html, dash_table
 import ast
 from datetime import datetime, timedelta
 import pandas as pd
-from callbacks import register_callbacks
+from callbacks.callbacks import register_callbacks
 from llm_integration import check_ollama_status, extract_model_names
 from data_management import load_or_fetch_data, load_job_costs
 
