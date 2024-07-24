@@ -281,7 +281,35 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
                 xanchor="left",
                 x=1.02
             ),
-            margin=dict(r=200)  # Add right margin to accommodate the legend
+            margin=dict(r=200, b=100),  # Increased bottom margin for x-axis labels
+            xaxis=dict(
+                tickangle=45,  # Angled labels for better readability
+                automargin=True  # Automatically adjust margins to fit labels
+            )
+        )
+        
+        # Make the chart horizontally scrollable
+        fig.update_layout(
+            xaxis=dict(
+                rangeslider=dict(visible=False),  # Remove the rangeslider
+                range=[0, 10],  # Show only first 10 employees initially
+                automargin=True
+            ),
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    direction="left",
+                    buttons=[
+                        dict(args=[{"xaxis.range": [0, 10]}], label="Reset View", method="relayout"),
+                    ],
+                    pad={"r": 10, "t": 10},
+                    showactive=False,
+                    x=0.11,
+                    xanchor="left",
+                    y=1.1,
+                    yanchor="top"
+                ),
+            ]
         )
         
         return fig, f"Total Hours Worked: {total_hours}"
@@ -499,55 +527,31 @@ def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, 
         filtered_timesheet = df_timesheet[
             (df_timesheet['date'] >= start_date) &
             (df_timesheet['date'] <= end_date)
-        ].copy()  # Create a copy to avoid SettingWithCopyWarning
+        ].copy()
 
-        # Debug: print the first few rows and data types of the filtered timesheet
-        print(filtered_timesheet.head())
-        print(filtered_timesheet.dtypes)
-
-        # Convert 'task_id' to string
-        filtered_timesheet['task_id_str'] = filtered_timesheet['task_id'].astype(str)
-
-        # Debug: print unique values in task_id_str column
-        print("Unique task_id_str values:")
-        print(filtered_timesheet['task_id_str'].unique())
-
-        # Group by task and calculate total hours
-        try:
-            task_hours = filtered_timesheet.groupby('task_id_str')['unit_amount'].sum().reset_index()
-        except Exception as e:
-            print(f"Error in groupby operation: {e}")
-            return html.Div(f"Error: Unable to process task data. Details: {str(e)}")
-
-        # Filter tasks longer than 8 hours
-        long_tasks = task_hours[task_hours['unit_amount'] > 8]
-
-        # Convert 'id' in df_tasks to string for merging
-        df_tasks['id_str'] = df_tasks['id'].astype(str)
-
-        # Merge with task names
-        try:
-            long_tasks = pd.merge(long_tasks, df_tasks[['id_str', 'name']], 
-                                left_on='task_id_str', right_on='id_str', how='left')
-        except Exception as e:
-            print(f"Error in merging task data: {e}")
-            return html.Div(f"Error: Unable to merge task data. Details: {str(e)}")
+        # Filter timesheets longer than 8 hours
+        long_timesheets = filtered_timesheet[filtered_timesheet['unit_amount'] > 8]
 
         # Sort by hours descending
-        long_tasks = long_tasks.sort_values('unit_amount', ascending=False)
+        long_timesheets = long_timesheets.sort_values('unit_amount', ascending=False)
 
         # Create the list items
         list_items = []
-        for _, row in long_tasks.iterrows():
-            task_name = row['name'] if pd.notna(row['name']) else 'Unknown Task'
-            task_id = row['task_id_str']
+        for _, row in long_timesheets.iterrows():
+            employee_name = row['employee_name']
+            project_name = row['project_name']
+            task_id = row['task_id']
             hours = row['unit_amount']
-            list_items.append(html.Li(f"{task_name} (ID: {task_id}): {hours:.2f} hours"))
+            date = row['date'].strftime('%Y-%m-%d')
+            list_items.append(html.Li(f"{employee_name} - {project_name} (Task ID: {task_id}) on {date}: {hours:.2f} hours"))
 
         if not list_items:
-            return html.Div("No tasks longer than 8 hours found in the selected date range.")
+            return html.Div("No timesheets longer than 8 hours found in the selected date range.")
 
         return html.Div([
-            html.H4("Tasks Longer Than 8 Hours:"),
-            html.Ul(list_items)
+            html.H4("Timesheets Longer Than 8 Hours:"),
+            html.Div(
+                html.Ul(list_items),
+                style={'max-height': '400px', 'overflow-y': 'auto', 'border': '1px solid #ddd', 'padding': '10px'}
+            )
         ])
