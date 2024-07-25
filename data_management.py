@@ -1,5 +1,3 @@
-# In data_management.py
-
 import os
 import pickle
 import json
