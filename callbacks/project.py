@@ -46,10 +46,10 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
 
         # Timeline Chart (Man Hours/Days)
-        timeline_fig = create_timeline_chart(period_timesheet, selected_project, use_man_hours, df_tasks)
+        timeline_fig = create_timeline_chart(period_timesheet, df_tasks, selected_project, use_man_hours)
 
         # Revenue Chart
-        revenue_fig = create_revenue_chart(period_timesheet, df_employees, job_costs, selected_project, df_tasks)
+        revenue_fig = create_revenue_chart(period_timesheet, df_employees, df_tasks, job_costs, selected_project)
 
         # Tasks and Employees Chart
         tasks_employees_fig = create_tasks_employees_chart(period_timesheet, df_tasks, selected_project)
@@ -91,13 +91,27 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
         revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
     return revenue
 
-def create_timeline_chart(timesheet_data, project_name, use_man_hours, df_tasks):
-    # Group by date, employee, and task
-    daily_effort = timesheet_data.groupby(['date', 'employee_name', 'task_id'])['unit_amount'].sum().reset_index()
+def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hours):
+    # Create a copy of the data to avoid SettingWithCopyWarning
+    daily_effort = timesheet_data.copy()
     
-    # Merge with tasks data to get task names
-    daily_effort = pd.merge(daily_effort, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
-    daily_effort['task_name'] = daily_effort['name'].fillna(daily_effort['task_id'])
+    # Ensure tasks_data is a DataFrame
+    if not isinstance(tasks_data, pd.DataFrame):
+        print("Warning: tasks_data is not a DataFrame. Skipping task name merge.")
+        daily_effort['task_name'] = daily_effort['task_id']
+    else:
+        # Merge with tasks data to get task names
+        daily_effort = pd.merge(daily_effort, tasks_data[['id', 'name']], left_on='task_id', right_on='id', how='left', suffixes=('', '_task'))
+        
+        # Check if 'name_task' column exists after merge
+        if 'name_task' in daily_effort.columns:
+            daily_effort['task_name'] = daily_effort['name_task'].fillna(daily_effort['task_id'])
+        else:
+            print("Warning: 'name_task' column not found after merge. Using 'task_id' as task name.")
+            daily_effort['task_name'] = daily_effort['task_id']
+    
+    # Group by date, employee, and task
+    daily_effort = daily_effort.groupby(['date', 'employee_name', 'task_name'])['unit_amount'].sum().reset_index()
     
     # Sort the data
     daily_effort = daily_effort.sort_values(['date', 'employee_name'])
@@ -143,22 +157,32 @@ def create_timeline_chart(timesheet_data, project_name, use_man_hours, df_tasks)
     
     return fig
 
-def create_revenue_chart(timesheet_data, employees_data, job_costs, project_name, df_tasks):
-    # Calculate revenue for each timesheet entry
-    def calculate_entry_revenue(row):
-        employee = employees_data[employees_data['name'] == row['employee_name']].iloc[0]
-        job_title = extract_job_title(employee)
-        daily_revenue = float(job_costs.get(job_title, {}).get('revenue') or 0)
-        return (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
-
-    timesheet_data['revenue'] = timesheet_data.apply(calculate_entry_revenue, axis=1)
-
-    # Group by date, employee, and task
-    daily_revenue = timesheet_data.groupby(['date', 'employee_name', 'task_id'])[['revenue', 'unit_amount']].sum().reset_index()
+def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, project_name):
+    # Create a copy of the data to avoid SettingWithCopyWarning
+    daily_revenue = timesheet_data.copy()
     
-    # Merge with tasks data to get task names
-    daily_revenue = pd.merge(daily_revenue, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
-    daily_revenue['task_name'] = daily_revenue['name'].fillna(daily_revenue['task_id'])
+    # Calculate revenue for each timesheet entry
+    daily_revenue['revenue'] = daily_revenue.apply(
+        lambda row: calculate_entry_revenue(row, employees_data, job_costs), axis=1
+    )
+
+    # Ensure tasks_data is a DataFrame
+    if not isinstance(tasks_data, pd.DataFrame):
+        print("Warning: tasks_data is not a DataFrame. Skipping task name merge.")
+        daily_revenue['task_name'] = daily_revenue['task_id']
+    else:
+        # Merge with tasks data to get task names
+        daily_revenue = pd.merge(daily_revenue, tasks_data[['id', 'name']], left_on='task_id', right_on='id', how='left', suffixes=('', '_task'))
+        
+        # Check if 'name_task' column exists after merge
+        if 'name_task' in daily_revenue.columns:
+            daily_revenue['task_name'] = daily_revenue['name_task'].fillna(daily_revenue['task_id'])
+        else:
+            print("Warning: 'name_task' column not found after merge. Using 'task_id' as task name.")
+            daily_revenue['task_name'] = daily_revenue['task_id']
+    
+    # Group by date, employee, and task
+    daily_revenue = daily_revenue.groupby(['date', 'employee_name', 'task_name'])[['revenue', 'unit_amount']].sum().reset_index()
     
     # Sort the data
     daily_revenue = daily_revenue.sort_values(['date', 'employee_name'])
@@ -198,6 +222,17 @@ def create_revenue_chart(timesheet_data, employees_data, job_costs, project_name
     )
     
     return fig
+
+def calculate_entry_revenue(row, employees_data, job_costs):
+    employee_data = employees_data[employees_data['name'] == row['employee_name']]
+    if employee_data.empty:
+        print(f"Warning: Employee {row['employee_name']} not found in employees data")
+        return 0
+    
+    employee = employee_data.iloc[0]
+    job_title = extract_job_title(employee)
+    daily_revenue = float(job_costs.get(job_title, {}).get('revenue') or 0)
+    return (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
 
 def extract_job_title(employee):
     if 'job_id' in employee and isinstance(employee['job_id'], str):
