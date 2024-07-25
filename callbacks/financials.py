@@ -1,6 +1,5 @@
 from dash.dependencies import Input, Output
 import logging
-from dash import dcc
 import plotly.graph_objs as go
 import pandas as pd
 import dash
@@ -8,7 +7,7 @@ from datetime import datetime
 import json
 import os
 
-from data_management import get_last_update_time
+from callbacks.project import calculate_project_revenue
 
 logger = logging.getLogger(__name__)
 
@@ -62,42 +61,29 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_financials
             ]
 
         try:
-            financials_data = load_financials_data()
-            last_calculation = get_last_calculation_time()
-            last_update = get_last_update_time()
-
-            if ctx.triggered[0]['prop_id'] == 'calculate-button.n_clicks':
-                if last_calculation is None or last_update > last_calculation:
-                    financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs)
-                    save_financials_data(financials_data)
-                    set_last_calculation_time(datetime.now())
-                else:
-                    new_data = calculate_incremental_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs, last_calculation)
-                    financials_data.update(new_data)
-                    save_financials_data(financials_data)
-                    set_last_calculation_time(datetime.now())
+            start_date = pd.to_datetime(start_date)
+            end_date = pd.to_datetime(end_date)
+            
+            financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date)
+            save_financials_data(financials_data)
+            set_last_calculation_time(datetime.now())
 
             if not financials_data:
                 empty_fig = go.Figure()
                 return [
                     empty_fig,
-                    "No data available. Please calculate.",
+                    "No data available. Please check your date range.",
                     empty_fig,
                     empty_fig,
-                    "No data available. Please calculate.",
+                    "No data available. Please check your date range.",
                     False
                 ]
 
-            start_date = pd.to_datetime(start_date)
-            end_date = pd.to_datetime(end_date)
+            fig_financials = create_financials_chart(financials_data, df_employees, job_costs)
+            fig_hours = create_hours_chart(financials_data)
+            fig_revenue = create_revenue_chart(financials_data)
 
-            filtered_data = {k: v for k, v in financials_data.items() if start_date <= pd.to_datetime(k) <= end_date}
-
-            fig_financials = create_financials_chart(filtered_data)
-            fig_hours = create_hours_chart(filtered_data)
-            fig_revenue = create_revenue_chart(filtered_data)
-
-            total_revenue = sum(day_data['revenue'] for day_data in filtered_data.values())
+            total_revenue = sum(project_data['total_revenue'] for project_data in financials_data.values())
 
             return [
                 fig_financials,
@@ -119,94 +105,106 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_financials
                 False
             ]
 
-def calculate_all_financials(df_projects, df_employees, df_timesheet, df_tasks, job_costs):
+def calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date):
     logger.debug("Calculating all financials")
-    logger.debug(f"Timesheet columns: {df_timesheet.columns}")
-    logger.debug(f"Timesheet shape: {df_timesheet.shape}")
-    logger.debug(f"Timesheet sample:\n{df_timesheet.head()}")
-    logger.debug(f"Employees columns: {df_employees.columns}")
-    logger.debug(f"Employees sample:\n{df_employees.head()}")
     
     financials_data = {}
     
-    # Find the correct date column
-    date_column = next((col for col in df_timesheet.columns if 'date' in col.lower()), None)
-    if not date_column:
-        raise ValueError("No date column found in timesheet data")
-
-    # Find a column to link timesheet entries to employees
-    employee_link_column = next((col for col in df_timesheet.columns if 'employee' in col.lower() or 'user' in col.lower()), None)
-    if not employee_link_column:
-        raise ValueError("No column found to link timesheet entries to employees")
-
-    for _, project in df_projects.iterrows():
-        project_timesheet = df_timesheet[df_timesheet['project_name'] == project['name']]
-        for _, entry in project_timesheet.iterrows():
-            date = entry[date_column].date().isoformat()
-            if date not in financials_data:
-                financials_data[date] = {'hours': 0, 'revenue': 0}
-            
-            # Find the corresponding employee
-            employee_id = entry[employee_link_column]
-            employee = df_employees[df_employees['id'] == employee_id].iloc[0] if not df_employees[df_employees['id'] == employee_id].empty else None
-            
-            if employee is not None:
-                job_title = employee.get('job_title', 'Unknown')
-                hourly_rate = float(job_costs.get(job_title, {}).get('revenue', 0)) / 8  # Assuming 8-hour workday
-                
-                hours = entry['unit_amount'] if 'unit_amount' in entry else 0
-                revenue = hours * hourly_rate
-                
-                financials_data[date]['hours'] += hours
-                financials_data[date]['revenue'] += revenue
-            else:
-                logger.warning(f"No matching employee found for ID: {employee_id}")
+    for _, project in df_portfolio.iterrows():
+        project_name = project['name']
+        project_timesheet = df_timesheet[
+            (df_timesheet['project_name'] == project_name) &
+            (df_timesheet['date'] >= start_date) &
+            (df_timesheet['date'] <= end_date)
+        ]
+        
+        if project_timesheet.empty:
+            continue
+        
+        project_revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
+        project_hours = project_timesheet['unit_amount'].sum()
+        
+        daily_data = project_timesheet.groupby('date').agg({
+            'unit_amount': 'sum',
+            'employee_name': lambda x: list(set(x)),
+            'task_id': lambda x: list(set(x))
+        }).reset_index()
+        
+        project_financials = {
+            'total_revenue': project_revenue,
+            'total_hours': project_hours,
+            'daily_data': daily_data.to_dict('records')
+        }
+        
+        financials_data[project_name] = project_financials
     
     return financials_data
 
-def calculate_incremental_financials(df_projects, df_employees, df_timesheet, df_tasks, job_costs, last_calculation):
-    logger.debug("Calculating incremental financials")
-    new_data = {}
-    for _, project in df_projects.iterrows():
-        project_timesheet = df_timesheet[(df_timesheet['project_name'] == project['name']) & 
-                                         (df_timesheet['date'] > last_calculation)]
-        for _, entry in project_timesheet.iterrows():
-            date = entry['date'].date().isoformat()
-            if date not in new_data:
-                new_data[date] = {'hours': 0, 'revenue': 0}
-            
-            employee = df_employees[df_employees['name'] == entry['employee_name']].iloc[0]
-            job_title = employee['job_title']
-            hourly_rate = float(job_costs.get(job_title, {}).get('revenue', 0)) / 8  # Assuming 8-hour workday
-            
-            hours = entry['unit_amount']
-            revenue = hours * hourly_rate
-            
-            new_data[date]['hours'] += hours
-            new_data[date]['revenue'] += revenue
+def create_financials_chart(financials_data, df_employees, job_costs):
+    fig = go.Figure()
     
-    return new_data
-
-def create_financials_chart(data):
-    dates = list(data.keys())
-    revenues = [day_data['revenue'] for day_data in data.values()]
+    for project, data in financials_data.items():
+        daily_data = pd.DataFrame(data['daily_data'])
+        daily_revenue = daily_data.apply(lambda row: calculate_project_revenue(
+            pd.DataFrame({'date': [row['date']], 'unit_amount': [row['unit_amount']], 'employee_name': row['employee_name']}),
+            df_employees, job_costs
+        ), axis=1)
+        
+        fig.add_trace(go.Scatter(
+            x=daily_data['date'],
+            y=daily_revenue,
+            name=project,
+            mode='lines+markers'
+        ))
     
-    fig = go.Figure(data=[go.Scatter(x=dates, y=revenues, mode='lines')])
-    fig.update_layout(title='Daily Financial Summary', xaxis_title='Date', yaxis_title='Revenue')
+    fig.update_layout(
+        title='Daily Revenue by Project',
+        xaxis_title='Date',
+        yaxis_title='Revenue',
+        hovermode='x unified'
+    )
+    
     return fig
 
-def create_hours_chart(data):
-    dates = list(data.keys())
-    hours = [day_data['hours'] for day_data in data.values()]
+def create_hours_chart(financials_data):
+    fig = go.Figure()
     
-    fig = go.Figure(data=[go.Bar(x=dates, y=hours)])
-    fig.update_layout(title='Total Hours for All Projects', xaxis_title='Date', yaxis_title='Hours')
+    for project, data in financials_data.items():
+        daily_data = pd.DataFrame(data['daily_data'])
+        
+        fig.add_trace(go.Bar(
+            x=daily_data['date'],
+            y=daily_data['unit_amount'],
+            name=project
+        ))
+    
+    fig.update_layout(
+        title='Daily Hours by Project',
+        xaxis_title='Date',
+        yaxis_title='Hours',
+        barmode='stack'
+    )
+    
     return fig
 
-def create_revenue_chart(data):
-    dates = list(data.keys())
-    revenues = [day_data['revenue'] for day_data in data.values()]
+def create_revenue_chart(financials_data):
+    fig = go.Figure()
     
-    fig = go.Figure(data=[go.Bar(x=dates, y=revenues)])
-    fig.update_layout(title='Total Acquired Revenue for All Projects', xaxis_title='Date', yaxis_title='Revenue')
+    projects = list(financials_data.keys())
+    revenues = [data['total_revenue'] for data in financials_data.values()]
+    
+    fig.add_trace(go.Bar(
+        x=projects,
+        y=revenues,
+        text=revenues,
+        textposition='auto'
+    ))
+    
+    fig.update_layout(
+        title='Total Revenue by Project',
+        xaxis_title='Project',
+        yaxis_title='Revenue',
+        yaxis_tickformat='$,.0f'
+    )
+    
     return fig
