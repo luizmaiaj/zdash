@@ -182,20 +182,33 @@ def create_financials_chart(financials_data, df_employees, job_costs):
     for project, data in financials_data.items():
         daily_data = pd.DataFrame(data['daily_data'])
         if daily_data.empty:
+            logger.warning(f"No daily data for project: {project}")
             continue
         
         date_column = daily_data.columns[0]  # Assume the first column is the date column
-        daily_revenue = daily_data.apply(lambda row: calculate_project_revenue(
-            pd.DataFrame({date_column: [row[date_column]], 'unit_amount': [row['unit_amount']], 'employee_name': row['employee_name']}),
-            df_employees, job_costs
-        ), axis=1)
         
-        fig.add_trace(go.Scatter(
-            x=daily_data[date_column],
-            y=daily_revenue,
-            name=project,
-            mode='lines+markers'
-        ))
+        try:
+            daily_revenue = []
+            for _, row in daily_data.iterrows():
+                project_timesheet = pd.DataFrame({
+                    date_column: [row[date_column]],
+                    'unit_amount': [row['unit_amount']],
+                    'employee_name': [row['employee_name'][0] if isinstance(row['employee_name'], list) else row['employee_name']]
+                })
+                revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
+                daily_revenue.append(revenue)
+            
+            daily_data['revenue'] = daily_revenue
+            
+            fig.add_trace(go.Scatter(
+                x=daily_data[date_column],
+                y=daily_data['revenue'],
+                name=project,
+                mode='lines+markers'
+            ))
+        except Exception as e:
+            logger.error(f"Error processing data for project {project}: {str(e)}")
+            continue
     
     fig.update_layout(
         title='Daily Revenue by Project',
