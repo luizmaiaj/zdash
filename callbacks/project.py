@@ -168,6 +168,9 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
                           '%{text} hours<extra></extra>'
         ))
 
+    # Calculate the height required for 25 tasks (assuming 30px per task)
+    chart_height = min(25 * 30 + 200, 1000)  # 200px for margins and legend, max height of 1000px
+
     fig.update_layout(
         barmode='stack',
         title=f'Tasks and Employee Hours for {project_name}',
@@ -181,13 +184,17 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
             xanchor="left",
             x=1.02
         ),
-        height=600,
-        margin=dict(r=200, b=100, t=50),
+        height=chart_height,
+        margin=dict(r=200, b=100, t=50, l=100),
         xaxis=dict(
             tickangle=45,
             tickmode='array',
             tickvals=list(range(len(task_employee_hours.index))),
-            ticktext=task_employee_hours.index
+            ticktext=task_employee_hours.index,
+            range=[-0.5, 24.5]  # Show only 25 tasks initially
+        ),
+        yaxis=dict(
+            fixedrange=True  # Prevent y-axis zooming
         )
     )
 
