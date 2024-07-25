@@ -91,6 +91,36 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
         revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
     return revenue
 
+def calculate_legend_height(fig):
+    """Calculate the approximate height of the legend."""
+    num_items = len(fig.data)
+    item_height = 20  # Estimated height of each legend item in pixels
+    padding = 20  # Extra padding
+    return num_items * item_height + padding
+
+def adjust_layout_for_legend(fig, title):
+    """Adjust the layout to accommodate the legend and ensure the title is visible."""
+    legend_height = calculate_legend_height(fig)
+    
+    fig.update_layout(
+        title={
+            'text': title,
+            'y': 1,  # Place the title at the top
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1,
+            xanchor="left",
+            x=0
+        ),
+        margin=dict(t=legend_height + 60),  # Add extra top margin for legend and padding
+        height=600 + legend_height  # Increase overall height
+    )
+
 def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hours):
     # Create a copy of the data to avoid SettingWithCopyWarning
     daily_effort = timesheet_data.copy()
@@ -139,27 +169,12 @@ def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hour
     
     y_title = 'Man Hours' if use_man_hours else 'Man Days'
     
+    title = f'Daily Effort for {project_name}'
+    adjust_layout_for_legend(fig, title)
+    
     fig.update_layout(
-        barmode='stack',
-        title={
-            'text': f'Daily Effort for {project_name}',
-            'y': 0.95,  # Move the title up
-            'x': 0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
         xaxis_title='Date',
-        yaxis_title=y_title,
-        height=500,  # Increase height to accommodate legend
-        legend_title='Employees',
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ),
-        margin=dict(t=100)  # Increase top margin
+        yaxis_title='Man Hours' if use_man_hours else 'Man Days'
     )
     
     return fig
@@ -212,27 +227,12 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
             customdata=employee_data[['task_name', 'unit_amount']]
         ))
     
+    title = f'Daily Acquired Revenue for {project_name}'
+    adjust_layout_for_legend(fig, title)
+    
     fig.update_layout(
-        barmode='stack',
-        title={
-            'text': f'Daily Acquired Revenue for {project_name}',
-            'y': 0.95,  # Move the title up
-            'x': 0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
         xaxis_title='Date',
-        yaxis_title='Revenue (USD)',
-        height=500,  # Increase height to accommodate legend
-        legend_title='Employees',
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ),
-        margin=dict(t=100)  # Increase top margin
+        yaxis_title='Revenue (USD)'
     )
     
     return fig
@@ -289,27 +289,12 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
     # Calculate the height required for 25 tasks (assuming 30px per task)
     chart_height = min(25 * 30 + 200, 1000)  # 200px for margins and legend, max height of 1000px
 
+    title = f'Tasks and Employee Hours for {project_name}'
+    adjust_layout_for_legend(fig, title)
+    
     fig.update_layout(
-        barmode='stack',
-        title={
-            'text': f'Tasks and Employee Hours for {project_name}',
-            'y': 0.95,  # Move the title up
-            'x': 0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
         xaxis_title='Tasks',
         yaxis_title='Hours',
-        legend_title='Employees',
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1,
-            xanchor="left",
-            x=1.02
-        ),
-        height=chart_height + 50,  # Add extra height for the title
-        margin=dict(r=200, b=100, t=100, l=100),  # Increase top margin
         xaxis=dict(
             tickangle=45,
             tickmode='array',
