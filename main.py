@@ -138,7 +138,9 @@ app.layout = html.Div([
                     value=True,
                     inline=True
                 ),
+                html.Div(id='project-total-revenue', style={'font-weight': 'bold', 'margin-top': '10px'}),
                 dcc.Graph(id='project-timeline-chart'),
+                dcc.Graph(id='project-revenue-chart'),
                 dcc.Graph(id='project-tasks-employees-chart')
             ])
         ]),
@@ -243,7 +245,7 @@ app.layout = html.Div([
 ])
 
 # Register callbacks
-register_callbacks(app, df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
+register_callbacks(app, df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks, job_costs)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
