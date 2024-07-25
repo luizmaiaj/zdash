@@ -2,7 +2,7 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import dash
 import pandas as pd
-from data_management import load_or_fetch_data, serialize_dataframes, deserialize_dataframes
+from data_management import load_or_fetch_data, serialize_dataframes, deserialize_dataframes, get_last_update_time
 
 from callbacks.global_kpi import register_global_kpi_callbacks
 from callbacks.financials import register_financials_callbacks
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, job_costs):
     register_global_kpi_callbacks(app, df_projects)
-    register_financials_callbacks(app, df_projects, df_employees, df_financials, df_timesheet, df_tasks, job_costs)
+    register_financials_callbacks(app, df_projects, df_employees, df_timesheet, df_tasks, job_costs, get_last_update_time)
     register_portfolio_callbacks(app, df_timesheet, df_tasks)
     register_employees_callbacks(app, df_timesheet)
     register_llm_callback(app)

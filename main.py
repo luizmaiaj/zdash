@@ -11,11 +11,22 @@ from dotenv import find_dotenv, load_dotenv
 
 load_dotenv(find_dotenv())
 
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # Load or fetch data
 data, last_updated = load_or_fetch_data()
 df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
 
+logger.debug(f"Data loaded. Shapes: portfolio={df_portfolio.shape}, employees={df_employees.shape}, "
+             f"sales={df_sales.shape}, financials={df_financials.shape}, "
+             f"timesheet={df_timesheet.shape}, tasks={df_tasks.shape}")
+
 job_costs = load_job_costs()
+logger.debug(f"Job costs loaded: {len(job_costs)} entries")
 
 # Function to safely get DataFrame columns and process job_id
 def safe_get_columns(df, columns):
@@ -34,6 +45,7 @@ def safe_get_columns(df, columns):
 # Process df_employees to extract job titles
 df_employees_processed = safe_get_columns(df_employees, ['name', 'job_id', 'job_title'])
 unique_job_titles = df_employees_processed['job_title'].unique()
+logger.debug(f"Processed {len(df_employees_processed)} employees, found {len(unique_job_titles)} unique job titles")
 
 # Update job_costs with new job titles if they don't exist
 for title in unique_job_titles:
@@ -108,12 +120,12 @@ app.layout = html.Div([
         ]),
         dcc.Tab(label='Financials', children=[
             html.Div([
-                html.Button('Calculate Financials for All Projects', id='calculate-button'),
-                html.Div(id='calculation-progress'),
-                html.Div(id='total-revenue-display'),
+                html.Button('Calculate Financials', id='calculate-button', n_clicks=0),
                 dcc.Graph(id='financials-chart'),
+                html.Div(id='total-revenue-display'),
                 dcc.Graph(id='all-projects-hours-chart'),
-                dcc.Graph(id='all-projects-revenue-chart')
+                dcc.Graph(id='all-projects-revenue-chart'),
+                html.Div(id='calculation-progress')
             ])
         ]),
         dcc.Tab(label='Portfolio', children=[
@@ -258,8 +270,12 @@ app.layout = html.Div([
     dcc.Store(id='data-store')
 ])
 
+logger.debug("App layout defined")
+
 # Register callbacks
 register_callbacks(app, df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks, job_costs)
+logger.debug("Callbacks registered")
 
 if __name__ == '__main__':
+    logger.info("Starting Dash server")
     app.run_server(debug=True)
