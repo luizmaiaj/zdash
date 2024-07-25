@@ -38,12 +38,12 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
             (project_timesheet['date'] <= end_date)
         ]
 
-        # Calculate revenue for the selected period
-        period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
-
         # Filter by selected employees if any
         if selected_employees:
             period_timesheet = period_timesheet[period_timesheet['employee_name'].isin(selected_employees)]
+
+        # Calculate revenue for the selected period (and selected employees if any)
+        period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
 
         # Timeline Chart (Man Hours/Days)
         timeline_fig = create_timeline_chart(period_timesheet, selected_project, use_man_hours)
@@ -54,12 +54,19 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         # Tasks and Employees Chart
         tasks_employees_fig = create_tasks_employees_chart(period_timesheet, df_tasks, selected_project)
 
+        # Prepare revenue messages
+        total_revenue_msg = f"Total Project Revenue: ${total_project_revenue:,.2f}"
+        period_revenue_msg = f"Revenue for Selected Period"
+        if selected_employees:
+            period_revenue_msg += f" and Employees"
+        period_revenue_msg += f": ${period_revenue:,.2f}"
+
         return (
             timeline_fig, 
             revenue_fig, 
             tasks_employees_fig, 
-            f"Total Project Revenue: ${total_project_revenue:,.2f}",
-            f"Revenue for Selected Period: ${period_revenue:,.2f}"
+            total_revenue_msg,
+            period_revenue_msg
         )
 
 def calculate_project_revenue(timesheet_data, employees_data, job_costs):
