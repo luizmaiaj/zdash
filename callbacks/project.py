@@ -94,7 +94,7 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
 def calculate_legend_height(fig):
     """Calculate the approximate height of the legend."""
     num_items = len(fig.data)
-    item_height = 20  # Estimated height of each legend item in pixels
+    item_height = 20 / 4  # Estimated height of each legend item in pixels
     padding = 20  # Extra padding
     return num_items * item_height + padding
 
@@ -105,7 +105,7 @@ def adjust_layout_for_legend(fig, title):
     fig.update_layout(
         title={
             'text': title,
-            'y': 1,  # Place the title at the top
+            'y': 0.95,  # Place the title closer to the top
             'x': 0.5,
             'xanchor': 'center',
             'yanchor': 'top'
@@ -117,8 +117,8 @@ def adjust_layout_for_legend(fig, title):
             xanchor="left",
             x=0
         ),
-        margin=dict(t=legend_height + 60),  # Add extra top margin for legend and padding
-        height=600 + legend_height  # Increase overall height
+        margin=dict(t=legend_height + 40),  # Reduced top margin
+        height=500 + legend_height  # Adjusted overall height
     )
 
 def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hours):
@@ -167,12 +167,11 @@ def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hour
             customdata=employee_data[['task_name']]
         ))
     
-    y_title = 'Man Hours' if use_man_hours else 'Man Days'
-    
     title = f'Daily Effort for {project_name}'
     adjust_layout_for_legend(fig, title)
     
     fig.update_layout(
+        barmode='stack',  # Ensure bars are stacked
         xaxis_title='Date',
         yaxis_title='Man Hours' if use_man_hours else 'Man Days'
     )
@@ -231,11 +230,13 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
     adjust_layout_for_legend(fig, title)
     
     fig.update_layout(
+        barmode='stack',  # Ensure bars are stacked
         xaxis_title='Date',
         yaxis_title='Revenue (USD)'
     )
     
     return fig
+
 
 def calculate_entry_revenue(row, employees_data, job_costs):
     employee_data = employees_data[employees_data['name'] == row['employee_name']]
@@ -286,13 +287,11 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
                           '%{text} hours<extra></extra>'
         ))
 
-    # Calculate the height required for 25 tasks (assuming 30px per task)
-    chart_height = min(25 * 30 + 200, 1000)  # 200px for margins and legend, max height of 1000px
-
     title = f'Tasks and Employee Hours for {project_name}'
     adjust_layout_for_legend(fig, title)
     
     fig.update_layout(
+        barmode='stack',  # Ensure bars are stacked
         xaxis_title='Tasks',
         yaxis_title='Hours',
         xaxis=dict(
