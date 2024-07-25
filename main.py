@@ -9,7 +9,7 @@ from data_management import load_or_fetch_data, load_job_costs
 
 # Load or fetch data
 data, last_updated = load_or_fetch_data()
-df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
+df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks = data
 
 job_costs = load_job_costs()
 
@@ -36,12 +36,12 @@ for title in unique_job_titles:
     if title and title not in job_costs:
         job_costs[title] = {'cost': '', 'revenue': ''}
 
-if df_projects is None:
+if df_portfolio is None:
     print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
     exit(1)
 
 # Print column names for debugging
-print("df_projects columns:", df_projects.columns)
+print("df_portfolio columns:", df_portfolio.columns)
 
 # Get available models
 ollama_running, available_models = check_ollama_status()
@@ -81,7 +81,7 @@ app.layout = html.Div([
     # Project filter
     dcc.Dropdown(
         id='project-filter',
-        options=safe_unique_values(df_projects, 'name'),
+        options=safe_unique_values(df_portfolio, 'name'),
         multi=True,
         placeholder="Select projects"
     ),
@@ -107,14 +107,14 @@ app.layout = html.Div([
                 dcc.Graph(id='financials-chart')
             ])
         ]),
-        dcc.Tab(label='Projects', children=[
+        dcc.Tab(label='Portfolio', children=[
             html.Div([
                 html.Div([
-                    dcc.Graph(id='projects-hours-chart'),
-                    dcc.Input(id='projects-hours-height', type='number', placeholder='Min height (px)', value=400)
+                    dcc.Graph(id='portfolio-hours-chart'),
+                    dcc.Input(id='portfolio-hours-height', type='number', placeholder='Min height (px)', value=400)
                 ]),
                 html.Div([
-                    dcc.Graph(id='projects-tasks-chart')
+                    dcc.Graph(id='portfolio-tasks-chart')
                 ])
             ])
         ]),
@@ -122,7 +122,7 @@ app.layout = html.Div([
             html.Div([
                 dcc.Dropdown(
                     id='project-selector',
-                    options=safe_unique_values(df_projects, 'name'),
+                    options=safe_unique_values(df_portfolio, 'name'),
                     placeholder="Select a project"
                 ),
                 dcc.Graph(id='project-tasks-employees-chart')
@@ -229,7 +229,7 @@ app.layout = html.Div([
 ])
 
 # Register callbacks
-register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
+register_callbacks(app, df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks)
 
 if __name__ == '__main__':
     app.run_server(debug=True)

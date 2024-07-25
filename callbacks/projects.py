@@ -2,16 +2,16 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 
-def register_projects_callbacks(app, df_timesheet, df_tasks):
+def register_portfolio_callbacks(app, df_timesheet, df_tasks):
     @app.callback(
-        [Output('projects-hours-chart', 'figure'),
-         Output('projects-tasks-chart', 'figure')],
+        [Output('portfolio-hours-chart', 'figure'),
+         Output('portfolio-tasks-chart', 'figure')],
         [Input('date-range', 'start_date'),
          Input('date-range', 'end_date'),
          Input('project-filter', 'value'),
-         Input('projects-hours-height', 'value')]
+         Input('portfolio-hours-height', 'value')]
     )
-    def update_projects(start_date, end_date, selected_projects, chart_height):
+    def update_portfolio(start_date, end_date, selected_projects, chart_height):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         

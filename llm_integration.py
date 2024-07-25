@@ -30,20 +30,57 @@ def prepare_data_summary(df_projects, df_employees, df_sales, df_financials, df_
     summary = f"""
     Projects: {len(df_projects)} total
     Employees: {len(df_employees)} total
-    Sales: {df_sales['amount_total'].sum():.2f} total
-    Financials: {df_financials['amount_total'].sum():.2f} total
+    """
+
+    # Handle sales data
+    if 'amount_total' in df_sales.columns:
+        summary += f"Sales: {df_sales['amount_total'].sum():.2f} total\n"
+    else:
+        numeric_columns = df_sales.select_dtypes(include=['float64', 'int64']).columns
+        if len(numeric_columns) > 0:
+            summary += f"Sales: {df_sales[numeric_columns[0]].sum():.2f} total (using {numeric_columns[0]} column)\n"
+        else:
+            summary += "Sales data not available\n"
+
+    # Handle financials data
+    if 'amount_total' in df_financials.columns:
+        summary += f"Financials: {df_financials['amount_total'].sum():.2f} total\n"
+    else:
+        numeric_columns = df_financials.select_dtypes(include=['float64', 'int64']).columns
+        if len(numeric_columns) > 0:
+            summary += f"Financials: {df_financials[numeric_columns[0]].sum():.2f} total (using {numeric_columns[0]} column)\n"
+        else:
+            summary += "Financial data not available\n"
+
+    summary += f"""
     Timesheet Entries: {len(df_timesheet)} total
     Tasks: {len(df_tasks)} total
-
-    Top 5 Projects by Hours:
-    {df_timesheet.groupby('project_name')['unit_amount'].sum().sort_values(ascending=False).head().to_string()}
-
-    Top 5 Employees by Hours:
-    {df_timesheet.groupby('employee_name')['unit_amount'].sum().sort_values(ascending=False).head().to_string()}
-
-    Monthly Sales Trend:
-    {df_sales.groupby(df_sales['date_order'].dt.to_period('M'))['amount_total'].sum().to_string()}
     """
+
+    # Handle top projects by hours
+    if 'project_name' in df_timesheet.columns and 'unit_amount' in df_timesheet.columns:
+        top_projects = df_timesheet.groupby('project_name')['unit_amount'].sum().sort_values(ascending=False).head()
+        summary += "\nTop 5 Projects by Hours:\n"
+        summary += top_projects.to_string()
+    else:
+        summary += "\nTop projects by hours data not available"
+
+    # Handle top employees by hours
+    if 'employee_name' in df_timesheet.columns and 'unit_amount' in df_timesheet.columns:
+        top_employees = df_timesheet.groupby('employee_name')['unit_amount'].sum().sort_values(ascending=False).head()
+        summary += "\n\nTop 5 Employees by Hours:\n"
+        summary += top_employees.to_string()
+    else:
+        summary += "\nTop employees by hours data not available"
+
+    # Handle monthly sales trend
+    if 'date_order' in df_sales.columns and 'amount_total' in df_sales.columns:
+        monthly_sales = df_sales.groupby(df_sales['date_order'].dt.to_period('M'))['amount_total'].sum()
+        summary += "\n\nMonthly Sales Trend:\n"
+        summary += monthly_sales.to_string()
+    else:
+        summary += "\nMonthly sales trend data not available"
+
     return summary
 
 def generate_llm_report(df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, selected_model):
