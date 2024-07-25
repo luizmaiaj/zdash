@@ -74,14 +74,14 @@ app.layout = html.Div([
             html.Span(id='last-update-time', style={'margin-left': '10px'})
         ], style={'float': 'right', 'margin-top': '20px'})
     ]),
-    
+
     # Date range selector
     dcc.DatePickerRange(
         id='date-range',
         start_date=datetime.now().date() - timedelta(days=30),
         end_date=datetime.now().date()
     ),
-    
+
     # Project filter
     dcc.Dropdown(
         id='project-filter',
@@ -89,7 +89,7 @@ app.layout = html.Div([
         multi=True,
         placeholder="Select projects"
     ),
-    
+
     # Employee filter
     dcc.Dropdown(
         id='employee-filter',
@@ -97,7 +97,7 @@ app.layout = html.Div([
         multi=True,
         placeholder="Select employees"
     ),
-    
+
     # Tabs for different dashboards
     dcc.Tabs([
         dcc.Tab(label='Global KPI', children=[
@@ -108,7 +108,12 @@ app.layout = html.Div([
         ]),
         dcc.Tab(label='Financials', children=[
             html.Div([
-                dcc.Graph(id='financials-chart')
+                html.Button('Calculate Financials for All Projects', id='calculate-button'),
+                html.Div(id='calculation-progress'),
+                html.Div(id='total-revenue-display'),
+                dcc.Graph(id='financials-chart'),
+                dcc.Graph(id='all-projects-hours-chart'),
+                dcc.Graph(id='all-projects-revenue-chart')
             ])
         ]),
         dcc.Tab(label='Portfolio', children=[

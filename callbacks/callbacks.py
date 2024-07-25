@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def register_callbacks(app, df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks, job_costs):
     register_global_kpi_callbacks(app, df_projects)
-    register_financials_callbacks(app, df_financials)
+    register_financials_callbacks(app, df_projects, df_employees, df_financials, df_timesheet, df_tasks, job_costs)
     register_portfolio_callbacks(app, df_timesheet, df_tasks)
     register_employees_callbacks(app, df_timesheet)
     register_llm_callback(app)
