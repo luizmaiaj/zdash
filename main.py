@@ -138,8 +138,11 @@ app.layout = html.Div([
                     value=True,
                     inline=True
                 ),
-                html.Div(id='project-total-revenue', style={'font-weight': 'bold', 'margin-top': '10px'}),
                 dcc.Graph(id='project-timeline-chart'),
+                html.Div([
+                    html.Div(id='project-total-revenue', style={'font-weight': 'bold', 'display': 'inline-block', 'margin-right': '20px'}),
+                    html.Div(id='project-period-revenue', style={'font-weight': 'bold', 'display': 'inline-block'})
+                ], style={'margin-top': '10px', 'margin-bottom': '10px'}),
                 dcc.Graph(id='project-revenue-chart'),
                 dcc.Graph(id='project-tasks-employees-chart')
             ])

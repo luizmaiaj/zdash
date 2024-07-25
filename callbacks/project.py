@@ -8,7 +8,8 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         [Output('project-timeline-chart', 'figure'),
          Output('project-revenue-chart', 'figure'),
          Output('project-tasks-employees-chart', 'figure'),
-         Output('project-total-revenue', 'children')],
+         Output('project-total-revenue', 'children'),
+         Output('project-period-revenue', 'children')],
         [Input('project-selector', 'value'),
          Input('date-range', 'start_date'),
          Input('date-range', 'end_date'),
@@ -17,7 +18,7 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
     )
     def update_project_charts(selected_project, start_date, end_date, selected_employees, use_man_hours):
         if not selected_project:
-            return go.Figure(), go.Figure(), go.Figure(), ""
+            return go.Figure(), go.Figure(), go.Figure(), "", ""
 
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
@@ -26,39 +27,46 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         project_timesheet = df_timesheet[df_timesheet['project_name'] == selected_project].copy()
 
         if project_timesheet.empty:
-            return go.Figure(), go.Figure(), go.Figure(), ""
+            return go.Figure(), go.Figure(), go.Figure(), "", ""
 
         # Calculate total project revenue (not considering date range)
         total_project_revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
 
         # Filter data based on date range
-        project_timesheet = project_timesheet[
+        period_timesheet = project_timesheet[
             (project_timesheet['date'] >= start_date) &
             (project_timesheet['date'] <= end_date)
         ]
 
+        # Calculate revenue for the selected period
+        period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
+
         # Filter by selected employees if any
         if selected_employees:
-            project_timesheet = project_timesheet[project_timesheet['employee_name'].isin(selected_employees)]
+            period_timesheet = period_timesheet[period_timesheet['employee_name'].isin(selected_employees)]
 
         # Timeline Chart (Man Hours/Days)
-        timeline_fig = create_timeline_chart(project_timesheet, selected_project, use_man_hours)
+        timeline_fig = create_timeline_chart(period_timesheet, selected_project, use_man_hours)
 
         # Revenue Chart
-        revenue_fig = create_revenue_chart(project_timesheet, df_employees, job_costs, selected_project)
+        revenue_fig = create_revenue_chart(period_timesheet, df_employees, job_costs, selected_project)
 
         # Tasks and Employees Chart
-        tasks_employees_fig = create_tasks_employees_chart(project_timesheet, df_tasks, selected_project)
+        tasks_employees_fig = create_tasks_employees_chart(period_timesheet, df_tasks, selected_project)
 
-        return timeline_fig, revenue_fig, tasks_employees_fig, f"Total Project Revenue: ${total_project_revenue:,.2f}"
+        return (
+            timeline_fig, 
+            revenue_fig, 
+            tasks_employees_fig, 
+            f"Total Project Revenue: ${total_project_revenue:,.2f}",
+            f"Revenue for Selected Period: ${period_revenue:,.2f}"
+        )
 
 def calculate_project_revenue(timesheet_data, employees_data, job_costs):
     revenue = 0
     for _, row in timesheet_data.iterrows():
         employee = employees_data[employees_data['name'] == row['employee_name']].iloc[0]
         
-        job_title = ''
-
         # Extract job title from job_id string
         if 'job_id' in employee and isinstance(employee['job_id'], str):
             try:
@@ -77,7 +85,7 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
             daily_revenue = float(job_costs.get(job_title, {}).get('revenue') or 0)
         except ValueError:
             daily_revenue = 0
-
+        
         revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
     return revenue
 
