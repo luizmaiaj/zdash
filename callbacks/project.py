@@ -141,10 +141,16 @@ def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hour
     
     fig.update_layout(
         barmode='stack',
-        title=f'Daily Effort for {project_name}',
+        title={
+            'text': f'Daily Effort for {project_name}',
+            'y': 0.95,  # Move the title up
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
         xaxis_title='Date',
         yaxis_title=y_title,
-        height=400,
+        height=500,  # Increase height to accommodate legend
         legend_title='Employees',
         legend=dict(
             orientation="h",
@@ -152,7 +158,8 @@ def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hour
             y=1.02,
             xanchor="right",
             x=1
-        )
+        ),
+        margin=dict(t=100)  # Increase top margin
     )
     
     return fig
@@ -207,10 +214,16 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
     
     fig.update_layout(
         barmode='stack',
-        title=f'Daily Acquired Revenue for {project_name}',
+        title={
+            'text': f'Daily Acquired Revenue for {project_name}',
+            'y': 0.95,  # Move the title up
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
         xaxis_title='Date',
         yaxis_title='Revenue (USD)',
-        height=400,
+        height=500,  # Increase height to accommodate legend
         legend_title='Employees',
         legend=dict(
             orientation="h",
@@ -218,7 +231,8 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
             y=1.02,
             xanchor="right",
             x=1
-        )
+        ),
+        margin=dict(t=100)  # Increase top margin
     )
     
     return fig
@@ -277,7 +291,13 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
 
     fig.update_layout(
         barmode='stack',
-        title=f'Tasks and Employee Hours for {project_name}',
+        title={
+            'text': f'Tasks and Employee Hours for {project_name}',
+            'y': 0.95,  # Move the title up
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
         xaxis_title='Tasks',
         yaxis_title='Hours',
         legend_title='Employees',
@@ -288,8 +308,8 @@ def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
             xanchor="left",
             x=1.02
         ),
-        height=chart_height,
-        margin=dict(r=200, b=100, t=50, l=100),
+        height=chart_height + 50,  # Add extra height for the title
+        margin=dict(r=200, b=100, t=100, l=100),  # Increase top margin
         xaxis=dict(
             tickangle=45,
             tickmode='array',
