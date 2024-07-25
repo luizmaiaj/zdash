@@ -35,7 +35,7 @@ def set_last_calculation_time(time):
     with open(LAST_CALCULATION_FILE, 'w') as f:
         json.dump({'time': time.isoformat()}, f)
 
-def register_financials_callbacks(app, df_projects, df_employees, df_financials, df_timesheet, df_tasks, job_costs):
+def register_financials_callbacks(app, df_portfolio, df_employees, df_financials, df_timesheet, df_tasks, job_costs):
     @app.callback(
         [Output('financials-chart', 'figure'),
          Output('total-revenue-display', 'children'),
@@ -51,67 +51,116 @@ def register_financials_callbacks(app, df_projects, df_employees, df_financials,
         logger.debug("Entering update_financials callback")
         ctx = dash.callback_context
         if not ctx.triggered:
-            return [dcc.Graph(figure=go.Figure())] * 3 + ["No data calculated yet", False]
+            empty_fig = go.Figure()
+            return [
+                empty_fig,
+                "No data calculated yet",
+                empty_fig,
+                empty_fig,
+                "No data calculated yet",
+                False
+            ]
 
-        financials_data = load_financials_data()
-        last_calculation = get_last_calculation_time()
-        last_update = get_last_update_time()
+        try:
+            financials_data = load_financials_data()
+            last_calculation = get_last_calculation_time()
+            last_update = get_last_update_time()
 
-        if ctx.triggered[0]['prop_id'] == 'calculate-button.n_clicks':
-            if last_calculation is None or last_update > last_calculation:
-                # Calculate all data
-                financials_data = calculate_all_financials(df_projects, df_employees, df_timesheet, df_tasks, job_costs)
-                save_financials_data(financials_data)
-                set_last_calculation_time(datetime.now())
-            else:
-                # Incremental update
-                new_data = calculate_incremental_financials(df_projects, df_employees, df_timesheet, df_tasks, job_costs, last_calculation)
-                financials_data.update(new_data)
-                save_financials_data(financials_data)
-                set_last_calculation_time(datetime.now())
+            if ctx.triggered[0]['prop_id'] == 'calculate-button.n_clicks':
+                if last_calculation is None or last_update > last_calculation:
+                    financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs)
+                    save_financials_data(financials_data)
+                    set_last_calculation_time(datetime.now())
+                else:
+                    new_data = calculate_incremental_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs, last_calculation)
+                    financials_data.update(new_data)
+                    save_financials_data(financials_data)
+                    set_last_calculation_time(datetime.now())
 
-        if not financials_data:
-            return [dcc.Graph(figure=go.Figure())] * 3 + ["No data available. Please calculate.", False]
+            if not financials_data:
+                empty_fig = go.Figure()
+                return [
+                    empty_fig,
+                    "No data available. Please calculate.",
+                    empty_fig,
+                    empty_fig,
+                    "No data available. Please calculate.",
+                    False
+                ]
 
-        start_date = pd.to_datetime(start_date)
-        end_date = pd.to_datetime(end_date)
+            start_date = pd.to_datetime(start_date)
+            end_date = pd.to_datetime(end_date)
 
-        filtered_data = {k: v for k, v in financials_data.items() if start_date <= pd.to_datetime(k) <= end_date}
+            filtered_data = {k: v for k, v in financials_data.items() if start_date <= pd.to_datetime(k) <= end_date}
 
-        fig_financials = create_financials_chart(filtered_data)
-        fig_hours = create_hours_chart(filtered_data)
-        fig_revenue = create_revenue_chart(filtered_data)
+            fig_financials = create_financials_chart(filtered_data)
+            fig_hours = create_hours_chart(filtered_data)
+            fig_revenue = create_revenue_chart(filtered_data)
 
-        total_revenue = sum(day_data['revenue'] for day_data in filtered_data.values())
+            total_revenue = sum(day_data['revenue'] for day_data in filtered_data.values())
 
-        return (
-            dcc.Graph(figure=fig_financials),
-            f"Total Revenue: ${total_revenue:,.2f}",
-            dcc.Graph(figure=fig_hours),
-            dcc.Graph(figure=fig_revenue),
-            "Calculation complete",
-            False
-        )
+            return [
+                fig_financials,
+                f"Total Revenue: ${total_revenue:,.2f}",
+                fig_hours,
+                fig_revenue,
+                "Calculation complete",
+                False
+            ]
+        except Exception as e:
+            logger.error(f"Error in update_financials: {str(e)}")
+            empty_fig = go.Figure()
+            return [
+                empty_fig,
+                f"Error: {str(e)}",
+                empty_fig,
+                empty_fig,
+                f"Error occurred: {str(e)}",
+                False
+            ]
 
 def calculate_all_financials(df_projects, df_employees, df_timesheet, df_tasks, job_costs):
     logger.debug("Calculating all financials")
+    logger.debug(f"Timesheet columns: {df_timesheet.columns}")
+    logger.debug(f"Timesheet shape: {df_timesheet.shape}")
+    logger.debug(f"Timesheet sample:\n{df_timesheet.head()}")
+    logger.debug(f"Employees columns: {df_employees.columns}")
+    logger.debug(f"Employees sample:\n{df_employees.head()}")
+    
     financials_data = {}
+    
+    # Find the correct date column
+    date_column = next((col for col in df_timesheet.columns if 'date' in col.lower()), None)
+    if not date_column:
+        raise ValueError("No date column found in timesheet data")
+
+    # Find a column to link timesheet entries to employees
+    employee_link_column = next((col for col in df_timesheet.columns if 'employee' in col.lower() or 'user' in col.lower()), None)
+    if not employee_link_column:
+        raise ValueError("No column found to link timesheet entries to employees")
+
     for _, project in df_projects.iterrows():
         project_timesheet = df_timesheet[df_timesheet['project_name'] == project['name']]
         for _, entry in project_timesheet.iterrows():
-            date = entry['date'].date().isoformat()
+            date = entry[date_column].date().isoformat()
             if date not in financials_data:
                 financials_data[date] = {'hours': 0, 'revenue': 0}
             
-            employee = df_employees[df_employees['name'] == entry['employee_name']].iloc[0]
-            job_title = employee['job_title']
-            hourly_rate = float(job_costs.get(job_title, {}).get('revenue', 0)) / 8  # Assuming 8-hour workday
+            # Find the corresponding employee
+            employee_id = entry[employee_link_column]
+            employee = df_employees[df_employees['id'] == employee_id].iloc[0] if not df_employees[df_employees['id'] == employee_id].empty else None
             
-            hours = entry['unit_amount']
-            revenue = hours * hourly_rate
-            
-            financials_data[date]['hours'] += hours
-            financials_data[date]['revenue'] += revenue
+            if employee is not None:
+                job_title = employee.get('job_title', 'Unknown')
+                hourly_rate = float(job_costs.get(job_title, {}).get('revenue', 0)) / 8  # Assuming 8-hour workday
+                
+                hours = entry['unit_amount'] if 'unit_amount' in entry else 0
+                revenue = hours * hourly_rate
+                
+                financials_data[date]['hours'] += hours
+                financials_data[date]['revenue'] += revenue
+            else:
+                logger.warning(f"No matching employee found for ID: {employee_id}")
     
     return financials_data
 
