@@ -46,10 +46,10 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
 
         # Timeline Chart (Man Hours/Days)
-        timeline_fig = create_timeline_chart(period_timesheet, selected_project, use_man_hours)
+        timeline_fig = create_timeline_chart(period_timesheet, selected_project, use_man_hours, df_tasks)
 
         # Revenue Chart
-        revenue_fig = create_revenue_chart(period_timesheet, df_employees, job_costs, selected_project)
+        revenue_fig = create_revenue_chart(period_timesheet, df_employees, job_costs, selected_project, df_tasks)
 
         # Tasks and Employees Chart
         tasks_employees_fig = create_tasks_employees_chart(period_timesheet, df_tasks, selected_project)
@@ -72,20 +72,15 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
 def calculate_project_revenue(timesheet_data, employees_data, job_costs):
     revenue = 0
     for _, row in timesheet_data.iterrows():
-        employee = employees_data[employees_data['name'] == row['employee_name']].iloc[0]
+        employee_data = employees_data[employees_data['name'] == row['employee_name']]
+        if employee_data.empty:
+            print(f"Warning: Employee {row} not found in employees data")
+            continue
+        
+        employee = employee_data.iloc[0]
         
         # Extract job title from job_id string
-        if 'job_id' in employee and isinstance(employee['job_id'], str):
-            try:
-                job_id_list = ast.literal_eval(employee['job_id'])
-                job_title = job_id_list[1] if len(job_id_list) > 1 else 'Unknown'
-            except (ValueError, SyntaxError, IndexError):
-                job_title = 'Unknown'
-        elif 'job_title' in employee:
-            job_title = employee['job_title']
-        else:
-            print(f"no job title found: {employee}")
-            continue
+        job_title = extract_job_title(employee)
         
         # Safely convert revenue to float, defaulting to 0 if empty or invalid
         try:
@@ -96,52 +91,126 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
         revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
     return revenue
 
-def create_timeline_chart(timesheet_data, project_name, use_man_hours):
-    daily_hours = timesheet_data.groupby('date')['unit_amount'].sum().reset_index()
+def create_timeline_chart(timesheet_data, project_name, use_man_hours, df_tasks):
+    # Group by date, employee, and task
+    daily_effort = timesheet_data.groupby(['date', 'employee_name', 'task_id'])['unit_amount'].sum().reset_index()
     
-    if use_man_hours:
-        y_values = daily_hours['unit_amount']
-        y_title = 'Man Hours'
-    else:
-        y_values = daily_hours['unit_amount'] / 8  # Convert to man days
-        y_title = 'Man Days'
-
-    fig = go.Figure(go.Bar(
-        x=daily_hours['date'],
-        y=y_values,
-        name='Daily Effort',
-        hovertemplate='Date: %{x}<br>' + y_title + ': %{y:.2f}<extra></extra>'
-    ))
-
+    # Merge with tasks data to get task names
+    daily_effort = pd.merge(daily_effort, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+    daily_effort['task_name'] = daily_effort['name'].fillna(daily_effort['task_id'])
+    
+    # Sort the data
+    daily_effort = daily_effort.sort_values(['date', 'employee_name'])
+    
+    fig = go.Figure()
+    
+    for employee in daily_effort['employee_name'].unique():
+        employee_data = daily_effort[daily_effort['employee_name'] == employee]
+        
+        y_values = employee_data['unit_amount']
+        if not use_man_hours:
+            y_values = y_values / 8  # Convert to man days
+        
+        fig.add_trace(go.Bar(
+            x=employee_data['date'],
+            y=y_values,
+            name=employee,
+            hovertemplate='Date: %{x}<br>' +
+                          'Employee: ' + employee + '<br>' +
+                          'Task: %{customdata[0]}<br>' +
+                          ('Hours: %{y:.2f}' if use_man_hours else 'Days: %{y:.2f}') +
+                          '<extra></extra>',
+            customdata=employee_data[['task_name']]
+        ))
+    
+    y_title = 'Man Hours' if use_man_hours else 'Man Days'
+    
     fig.update_layout(
+        barmode='stack',
         title=f'Daily Effort for {project_name}',
         xaxis_title='Date',
         yaxis_title=y_title,
-        height=400
+        height=400,
+        legend_title='Employees',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
-
+    
     return fig
 
-def create_revenue_chart(timesheet_data, employees_data, job_costs, project_name):
-    daily_revenue = timesheet_data.groupby('date').apply(
-        lambda x: calculate_project_revenue(x, employees_data, job_costs)
-    ).reset_index(name='revenue')
+def create_revenue_chart(timesheet_data, employees_data, job_costs, project_name, df_tasks):
+    # Calculate revenue for each timesheet entry
+    def calculate_entry_revenue(row):
+        employee = employees_data[employees_data['name'] == row['employee_name']].iloc[0]
+        job_title = extract_job_title(employee)
+        daily_revenue = float(job_costs.get(job_title, {}).get('revenue') or 0)
+        return (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
 
-    fig = go.Figure(go.Bar(
-        x=daily_revenue['date'],
-        y=daily_revenue['revenue'],
-        name='Daily Revenue',
-        hovertemplate='Date: %{x}<br>Revenue: $%{y:,.2f}<extra></extra>'
-    ))
+    timesheet_data['revenue'] = timesheet_data.apply(calculate_entry_revenue, axis=1)
 
+    # Group by date, employee, and task
+    daily_revenue = timesheet_data.groupby(['date', 'employee_name', 'task_id'])[['revenue', 'unit_amount']].sum().reset_index()
+    
+    # Merge with tasks data to get task names
+    daily_revenue = pd.merge(daily_revenue, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+    daily_revenue['task_name'] = daily_revenue['name'].fillna(daily_revenue['task_id'])
+    
+    # Sort the data
+    daily_revenue = daily_revenue.sort_values(['date', 'employee_name'])
+    
+    fig = go.Figure()
+    
+    for employee in daily_revenue['employee_name'].unique():
+        employee_data = daily_revenue[daily_revenue['employee_name'] == employee]
+        
+        fig.add_trace(go.Bar(
+            x=employee_data['date'],
+            y=employee_data['revenue'],
+            name=employee,
+            hovertemplate='Date: %{x}<br>' +
+                          'Employee: ' + employee + '<br>' +
+                          'Task: %{customdata[0]}<br>' +
+                          'Revenue: $%{y:.2f}<br>' +
+                          'Hours: %{customdata[1]:.2f}' +
+                          '<extra></extra>',
+            customdata=employee_data[['task_name', 'unit_amount']]
+        ))
+    
     fig.update_layout(
+        barmode='stack',
         title=f'Daily Acquired Revenue for {project_name}',
         xaxis_title='Date',
         yaxis_title='Revenue (USD)',
-        height=400
+        height=400,
+        legend_title='Employees',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
-
+    
     return fig
+
+def extract_job_title(employee):
+    if 'job_id' in employee and isinstance(employee['job_id'], str):
+        try:
+            job_id_list = ast.literal_eval(employee['job_id'])
+            return job_id_list[1] if len(job_id_list) > 1 else 'Unknown'
+        except (ValueError, SyntaxError, IndexError):
+            return 'Unknown'
+    elif 'job_title' in employee:
+        return employee['job_title']
+    else:
+        print(f"Job title not found: {employee}")
+        return 'unknown'
 
 def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
     merged_data = pd.merge(timesheet_data, tasks_data[['id', 'name']], 
