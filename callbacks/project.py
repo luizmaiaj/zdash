@@ -3,6 +3,10 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_costs):
     @app.callback(
         [Output('project-timeline-chart', 'figure'),
@@ -74,7 +78,7 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
     for _, row in timesheet_data.iterrows():
         employee_data = employees_data[employees_data['name'] == row['employee_name']]
         if employee_data.empty:
-            print(f"Warning: Employee {row} not found in employees data")
+            logger.warning(f"Employee {row['employee_name']} not found in employees data")
             continue
         
         employee = employee_data.iloc[0]
@@ -82,10 +86,17 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
         # Extract job title from job_id string
         job_title = extract_job_title(employee)
         
+        # Get the job costs, handling both function and dictionary cases
+        if callable(job_costs):
+            job_cost_data = job_costs(job_title)
+        else:
+            job_cost_data = job_costs.get(job_title, {})
+        
         # Safely convert revenue to float, defaulting to 0 if empty or invalid
         try:
-            daily_revenue = float(job_costs.get(job_title, {}).get('revenue') or 0)
-        except ValueError:
+            daily_revenue = float(job_cost_data.get('revenue') or 0)
+        except (ValueError, AttributeError):
+            logger.warning(f"Invalid revenue data for job title: {job_title}")
             daily_revenue = 0
         
         revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
@@ -237,7 +248,6 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
     
     return fig
 
-
 def calculate_entry_revenue(row, employees_data, job_costs):
     employee_data = employees_data[employees_data['name'] == row['employee_name']]
     if employee_data.empty:
@@ -259,8 +269,8 @@ def extract_job_title(employee):
     elif 'job_title' in employee:
         return employee['job_title']
     else:
-        print(f"Job title not found: {employee}")
-        return 'unknown'
+        logger.warning(f"Job title not found: {employee}")
+        return 'Unknown'
 
 def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
     merged_data = pd.merge(timesheet_data, tasks_data[['id', 'name']], 

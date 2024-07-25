@@ -42,7 +42,7 @@ def fetch_and_process_data(last_update=None):
             base_domain = []
 
         # Fetch necessary data
-        projects = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'], domain=base_domain)
+        portfolio = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'], domain=base_domain)
         employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id', 'job_title'], domain=base_domain)
         sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'], domain=base_domain)
         financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'], domain=base_domain)
@@ -50,7 +50,7 @@ def fetch_and_process_data(last_update=None):
         tasks = fetch_odoo_data('project.task', ['id', 'project_id', 'stage_id', 'name', 'create_date', 'date_end'], domain=base_domain)
 
         # Convert to pandas DataFrames with data validation
-        df_projects = validate_dataframe(pd.DataFrame(projects), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
+        df_portfolio = validate_dataframe(pd.DataFrame(portfolio), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
         df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id', 'job_title'])
         df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
         df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
@@ -58,7 +58,7 @@ def fetch_and_process_data(last_update=None):
         df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
 
         # Print column names for debugging
-        print("df_projects columns:", df_projects.columns)
+        print("df_portfolio columns:", df_portfolio.columns)
         print("df_employees columns:", df_employees.columns)
         print("df_sales columns:", df_sales.columns)
         print("df_financials columns:", df_financials.columns)
@@ -67,7 +67,7 @@ def fetch_and_process_data(last_update=None):
 
         # Convert date columns to datetime
         date_columns = {
-            'df_projects': ['date_start', 'date'],
+            'df_portfolio': ['date_start', 'date'],
             'df_sales': ['date_order'],
             'df_financials': ['date'],
             'df_timesheet': ['date'],
@@ -86,7 +86,7 @@ def fetch_and_process_data(last_update=None):
         df_tasks['project_id'] = df_tasks['project_id'].apply(extract_id)
 
         # Create dictionaries to map IDs to names
-        project_id_to_name = dict(zip(df_projects['id'], df_projects['name'])) if 'id' in df_projects.columns and 'name' in df_projects.columns else {}
+        project_id_to_name = dict(zip(df_portfolio['id'], df_portfolio['name'])) if 'id' in df_portfolio.columns and 'name' in df_portfolio.columns else {}
         employee_id_to_name = dict(zip(df_employees['id'], df_employees['name'])) if 'id' in df_employees.columns and 'name' in df_employees.columns else {}
 
         # Map IDs to names in timesheet and tasks DataFrames
@@ -97,7 +97,7 @@ def fetch_and_process_data(last_update=None):
         if 'project_id' in df_tasks.columns:
             df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
 
-        return df_projects, df_employees, df_sales, df_financials, df_timesheet, df_tasks
+        return df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks
     except Exception as e:
         print(f"Error in fetch_and_process_data: {e}")
         return None, None, None, None, None, None
