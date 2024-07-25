@@ -129,6 +129,16 @@ app.layout = html.Div([
                     options=safe_unique_values(df_portfolio, 'name'),
                     placeholder="Select a project"
                 ),
+                dcc.RadioItems(
+                    id='man-hours-toggle',
+                    options=[
+                        {'label': 'Man Hours', 'value': True},
+                        {'label': 'Man Days', 'value': False}
+                    ],
+                    value=True,
+                    inline=True
+                ),
+                dcc.Graph(id='project-timeline-chart'),
                 dcc.Graph(id='project-tasks-employees-chart')
             ])
         ]),
