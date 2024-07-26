@@ -9,7 +9,6 @@ from odoo import fetch_and_process_data
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 @dataclass
