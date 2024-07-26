@@ -150,29 +150,25 @@ def create_financials_chart(financials_data):
         daily_data['project'] = project
         all_daily_data.append(daily_data)
     
-        try:
-            if not all_daily_data:
-                return fig
-            
-            # Concatenate all daily data
-            all_daily_data = pd.concat(all_daily_data)
-            
-            # Pivot the data to create a stacked bar chart
-            pivoted_data = all_daily_data.pivot(index='date', columns='project', values='revenue').fillna(0)
-            
-            # Create stacked bar chart
-            for project in pivoted_data.columns:
-                fig.add_trace(go.Bar(
-                    x=pivoted_data.index,
-                    y=pivoted_data[project],
-                    name=project,
-                    hovertemplate='%{x}<br>' +
-                                '%{y:$,.2f}<br>' +
-                                '<extra></extra>'
-                ))
-        except Exception as e:
-            logger.error(f"Error processing data for project {project}: {str(e)}")
-            continue
+    if not all_daily_data:
+        return fig
+    
+    # Concatenate all daily data
+    all_daily_data = pd.concat(all_daily_data)
+    
+    # Pivot the data to create a stacked bar chart
+    pivoted_data = all_daily_data.pivot(index='date', columns='project', values='revenue').fillna(0)
+
+    # Create stacked bar chart
+    for project in pivoted_data.columns:
+        fig.add_trace(go.Bar(
+            x=pivoted_data.index,
+            y=pivoted_data[project],
+            name=project,
+            hovertemplate='%{x}<br>' +
+                        '%{y:$,.2f}<br>' +
+                        '<extra></extra>'
+        ))
     
     fig.update_layout(
         title='Daily Revenue by Project',
