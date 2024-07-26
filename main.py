@@ -63,7 +63,7 @@ def create_app():
     # Layout
     app.layout = html.Div([
         html.Div([
-            html.H1("Odoo Interactive Dashboard", style={'display': 'inline-block'}),
+            html.H1("Oodash", style={'display': 'inline-block'}),
             html.Div([
                 html.Button('Refresh Data', id='refresh-data', n_clicks=0),
                 html.Span(id='last-update-time', style={'margin-left': '10px'})
