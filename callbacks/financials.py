@@ -110,7 +110,7 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
             (data_manager.df_timesheet['project_name'] == project_name) &
             (data_manager.df_timesheet[date_column] >= start_date) &
             (data_manager.df_timesheet[date_column] <= end_date)
-        ]
+        ].copy()  # Create an explicit copy
         
         if project_timesheet.empty:
             continue
@@ -225,7 +225,8 @@ def create_revenue_chart(financials_data):
         title='Total Revenue by Project',
         xaxis_title='Project',
         yaxis_title='Revenue',
-        yaxis_tickformat='$,.0f'
+        yaxis_tickformat='$,.0f',
+        barmode='stack'
     )
     
     return fig

@@ -142,15 +142,21 @@ def create_timeline_chart(timesheet_data, tasks_data, project_name, use_man_hour
         print("Warning: tasks_data is not a DataFrame. Skipping task name merge.")
         daily_effort['task_name'] = daily_effort['task_id']
     else:
+        # Convert task_id to string if it's a list
+        daily_effort['task_id_str'] = daily_effort['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
+        
         # Merge with tasks data to get task names
-        daily_effort = pd.merge(daily_effort, tasks_data[['id', 'name']], left_on='task_id', right_on='id', how='left', suffixes=('', '_task'))
+        tasks_data['id_str'] = tasks_data['id'].astype(str)
+        daily_effort = pd.merge(daily_effort, tasks_data[['id_str', 'name']], 
+                                left_on='task_id_str', right_on='id_str', 
+                                how='left', suffixes=('', '_task'))
         
         # Check if 'name_task' column exists after merge
-        if 'name_task' in daily_effort.columns:
-            daily_effort['task_name'] = daily_effort['name_task'].fillna(daily_effort['task_id'])
+        if 'name' in daily_effort.columns:
+            daily_effort['task_name'] = daily_effort['name'].fillna(daily_effort['task_id_str'])
         else:
-            print("Warning: 'name_task' column not found after merge. Using 'task_id' as task name.")
-            daily_effort['task_name'] = daily_effort['task_id']
+            print("Warning: 'name' column not found after merge. Using 'task_id_str' as task name.")
+            daily_effort['task_name'] = daily_effort['task_id_str']
     
     # Group by date, employee, and task
     daily_effort = daily_effort.groupby(['date', 'employee_name', 'task_name'])['unit_amount'].sum().reset_index()
@@ -199,20 +205,28 @@ def create_revenue_chart(timesheet_data, employees_data, tasks_data, job_costs, 
         lambda row: calculate_entry_revenue(row, employees_data, job_costs), axis=1
     )
 
+    # Convert task_id to string if it's a list
+    daily_revenue['task_id_str'] = daily_revenue['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
+
     # Ensure tasks_data is a DataFrame
     if not isinstance(tasks_data, pd.DataFrame):
         print("Warning: tasks_data is not a DataFrame. Skipping task name merge.")
-        daily_revenue['task_name'] = daily_revenue['task_id']
+        daily_revenue['task_name'] = daily_revenue['task_id_str']
     else:
-        # Merge with tasks data to get task names
-        daily_revenue = pd.merge(daily_revenue, tasks_data[['id', 'name']], left_on='task_id', right_on='id', how='left', suffixes=('', '_task'))
+        # Convert id to string in tasks_data
+        tasks_data['id_str'] = tasks_data['id'].astype(str)
         
-        # Check if 'name_task' column exists after merge
-        if 'name_task' in daily_revenue.columns:
-            daily_revenue['task_name'] = daily_revenue['name_task'].fillna(daily_revenue['task_id'])
+        # Merge with tasks data to get task names
+        daily_revenue = pd.merge(daily_revenue, tasks_data[['id_str', 'name']], 
+                                 left_on='task_id_str', right_on='id_str', 
+                                 how='left', suffixes=('', '_task'))
+        
+        # Check if 'name' column exists after merge
+        if 'name' in daily_revenue.columns:
+            daily_revenue['task_name'] = daily_revenue['name'].fillna(daily_revenue['task_id_str'])
         else:
-            print("Warning: 'name_task' column not found after merge. Using 'task_id' as task name.")
-            daily_revenue['task_name'] = daily_revenue['task_id']
+            print("Warning: 'name' column not found after merge. Using 'task_id_str' as task name.")
+            daily_revenue['task_name'] = daily_revenue['task_id_str']
     
     # Group by date, employee, and task
     daily_revenue = daily_revenue.groupby(['date', 'employee_name', 'task_name'])[['revenue', 'unit_amount']].sum().reset_index()
@@ -274,10 +288,26 @@ def extract_job_title(employee):
         return 'Unknown'
 
 def create_tasks_employees_chart(timesheet_data, tasks_data, project_name):
-    merged_data = pd.merge(timesheet_data, tasks_data[['id', 'name']], 
-                           left_on='task_id', right_on='id', how='left')
+    # Create a copy of the timesheet data
+    timesheet_copy = timesheet_data.copy()
+    
+    # Convert task_id to string if it's a list
+    timesheet_copy['task_id_str'] = timesheet_copy['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
 
-    merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id']).fillna('Unknown Task')
+    # Ensure tasks_data is a DataFrame
+    if not isinstance(tasks_data, pd.DataFrame):
+        print("Warning: tasks_data is not a DataFrame. Using task_id as task name.")
+        timesheet_copy['task_name'] = timesheet_copy['task_id_str']
+    else:
+        # Convert id to string in tasks_data
+        tasks_data['id_str'] = tasks_data['id'].astype(str)
+        
+        # Merge with tasks data to get task names
+        merged_data = pd.merge(timesheet_copy, tasks_data[['id_str', 'name']], 
+                               left_on='task_id_str', right_on='id_str', 
+                               how='left', suffixes=('', '_task'))
+        
+        merged_data['task_name'] = merged_data['name'].fillna(merged_data['task_id_str'])
 
     task_employee_hours = merged_data.groupby(['task_name', 'employee_name'])['unit_amount'].sum().unstack(fill_value=0)
 
