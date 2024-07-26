@@ -24,27 +24,22 @@ def register_financials_callbacks(app, data_manager: DataManager):
          Input('calculate-button', 'n_clicks')]
     )
     def update_financials(start_date, end_date, n_clicks):
-        logger.debug("Entering update_financials callback")
-
         ctx = dash.callback_context
-        if not ctx.triggered:
+        if not ctx.triggered and not data_manager.financials_data:
             empty_fig = go.Figure()
-            return [
-                empty_fig,
-                "No data calculated yet",
-                empty_fig,
-                empty_fig,
-                "No data calculated yet",
-                False
-            ]
-
+            return [empty_fig, "No data calculated yet", empty_fig, empty_fig, "No data calculated yet", False]
         try:
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
-            
-            financials_data = calculate_all_financials(data_manager, start_date, end_date)
-            data_manager.save_financials_data(financials_data)
-            data_manager.set_last_calculation_time(datetime.now())
+
+            # Load existing financial data if available
+            financials_data = data_manager.load_financials_data()
+
+            if not financials_data or 'calculate-button' in ctx.triggered[0]['prop_id']:
+                # Calculate new financial data
+                financials_data = calculate_all_financials(data_manager, start_date, end_date)
+                data_manager.save_financials_data(financials_data)
+                data_manager.set_last_calculation_time(datetime.now())
 
             if not financials_data:
                 empty_fig = go.Figure()
@@ -57,7 +52,7 @@ def register_financials_callbacks(app, data_manager: DataManager):
                     False
                 ]
 
-            fig_financials = create_financials_chart(financials_data, data_manager.df_employees, data_manager.job_costs)
+            fig_financials = create_financials_chart(financials_data)
             fig_hours = create_hours_chart(financials_data)
             fig_revenue = create_revenue_chart(financials_data)
 
@@ -140,8 +135,11 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
     
     return financials_data
 
-def create_financials_chart(financials_data, df_employees, job_costs):
+def create_financials_chart(financials_data):
     fig = go.Figure()
+    
+    # Create a DataFrame to hold all daily revenue data
+    all_daily_data = []
     
     for project, data in financials_data.items():
         daily_data = pd.DataFrame(data['daily_data'])
@@ -149,27 +147,29 @@ def create_financials_chart(financials_data, df_employees, job_costs):
             logger.warning(f"No daily data for project: {project}")
             continue
         
-        date_column = daily_data.columns[0]  # Assume the first column is the date column
-        
+        daily_data['project'] = project
+        all_daily_data.append(daily_data)
+    
         try:
-            daily_revenue = []
-            for _, row in daily_data.iterrows():
-                project_timesheet = pd.DataFrame({
-                    date_column: [row[date_column]],
-                    'unit_amount': [row['unit_amount']],
-                    'employee_name': [row['employee_name'][0] if isinstance(row['employee_name'], list) else row['employee_name']]
-                })
-                revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
-                daily_revenue.append(revenue)
+            if not all_daily_data:
+                return fig
             
-            daily_data['revenue'] = daily_revenue
+            # Concatenate all daily data
+            all_daily_data = pd.concat(all_daily_data)
             
-            fig.add_trace(go.Scatter(
-                x=daily_data[date_column],
-                y=daily_data['revenue'],
-                name=project,
-                mode='lines+markers'
-            ))
+            # Pivot the data to create a stacked bar chart
+            pivoted_data = all_daily_data.pivot(index='date', columns='project', values='revenue').fillna(0)
+            
+            # Create stacked bar chart
+            for project in pivoted_data.columns:
+                fig.add_trace(go.Bar(
+                    x=pivoted_data.index,
+                    y=pivoted_data[project],
+                    name=project,
+                    hovertemplate='%{x}<br>' +
+                                '%{y:$,.2f}<br>' +
+                                '<extra></extra>'
+                ))
         except Exception as e:
             logger.error(f"Error processing data for project {project}: {str(e)}")
             continue
@@ -178,6 +178,7 @@ def create_financials_chart(financials_data, df_employees, job_costs):
         title='Daily Revenue by Project',
         xaxis_title='Date',
         yaxis_title='Revenue',
+        barmode='stack',
         hovermode='x unified'
     )
     
