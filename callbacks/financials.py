@@ -173,15 +173,14 @@ def create_financials_chart(financials_data, data_manager):
     # Pivot the data to create a stacked bar chart
     pivoted_data = all_daily_data.pivot(index='date', columns='project', values='revenue').fillna(0)
 
-    # Create stacked bar chart
+   # Create stacked bar chart
     for project in pivoted_data.columns:
         fig.add_trace(go.Bar(
             x=pivoted_data.index,
             y=pivoted_data[project],
             name=project,
-            hovertemplate='%{x}<br>' +
-                        '%{y:$,.2f}<br>' +
-                        '<extra></extra>'
+            hoverinfo='none',  # This disables the default hover
+            hovertemplate=None  # This ensures our custom hovertemplate is used
         ))
     
     fig.update_layout(
@@ -189,7 +188,17 @@ def create_financials_chart(financials_data, data_manager):
         xaxis_title='Date',
         yaxis_title='Revenue',
         barmode='stack',
-        hovermode='x unified'
+        hovermode='closest',
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=12,
+            font_family="Rockwell"
+        )
+    )
+
+    # Add custom hover text
+    fig.update_traces(
+        hovertemplate='<b>%{fullData.name}</b>Revenue: $%{y:,.2f}<extra></extra>'
     )
     
     return fig
