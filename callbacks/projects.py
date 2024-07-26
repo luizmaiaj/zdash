@@ -2,7 +2,9 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 
-def register_portfolio_callbacks(app, df_timesheet, df_tasks):
+from data_management import DataManager
+
+def register_portfolio_callbacks(app, data_manager: DataManager):
     @app.callback(
         [Output('portfolio-hours-chart', 'figure'),
          Output('portfolio-tasks-chart', 'figure')],
@@ -15,14 +17,14 @@ def register_portfolio_callbacks(app, df_timesheet, df_tasks):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
-        filtered_timesheet = df_timesheet[
-            (df_timesheet['date'] >= start_date) &
-            (df_timesheet['date'] <= end_date)
+        filtered_timesheet = data_manager.df_timesheet[
+            (data_manager.df_timesheet['date'] >= start_date) &
+            (data_manager.df_timesheet['date'] <= end_date)
         ]
         
-        filtered_tasks = df_tasks[
-            (df_tasks['create_date'] >= start_date) &
-            (df_tasks['create_date'] <= end_date)
+        filtered_tasks = data_manager.df_tasks[
+            (data_manager.df_tasks['create_date'] >= start_date) &
+            (data_manager.df_tasks['create_date'] <= end_date)
         ]
         
         if selected_projects:

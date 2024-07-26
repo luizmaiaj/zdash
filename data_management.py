@@ -165,7 +165,11 @@ class DataManager:
         
         return cached_data, last_update
 
-    def save_financials_data(self):
+    def save_financials_data(self, new_financials_data={}):
+
+        if new_financials_data:
+            self.financials_data = new_financials_data
+
         with open(self.FINANCIALS_FILE, 'w') as f:
             json.dump(self.financials_data, f, cls=DateTimeEncoder)
 

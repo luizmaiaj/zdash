@@ -2,12 +2,13 @@ import ast
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
+from data_management import DataManager
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_costs):
+def register_project_callback(app, data_manager: DataManager):
     @app.callback(
         [Output('project-timeline-chart', 'figure'),
          Output('project-revenue-chart', 'figure'),
@@ -28,13 +29,13 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
         end_date = pd.to_datetime(end_date)
 
         # Filter data based on project
-        project_timesheet = df_timesheet[df_timesheet['project_name'] == selected_project].copy()
+        project_timesheet = data_manager.df_timesheet[data_manager.df_timesheet['project_name'] == selected_project].copy()
 
         if project_timesheet.empty:
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
         # Calculate total project revenue (not considering date range)
-        total_project_revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
+        total_project_revenue = calculate_project_revenue(project_timesheet, data_manager.df_employees, data_manager.job_costs)
 
         # Filter data based on date range
         period_timesheet = project_timesheet[
@@ -47,16 +48,16 @@ def register_project_callback(app, df_timesheet, df_tasks, df_employees, job_cos
             period_timesheet = period_timesheet[period_timesheet['employee_name'].isin(selected_employees)]
 
         # Calculate revenue for the selected period (and selected employees if any)
-        period_revenue = calculate_project_revenue(period_timesheet, df_employees, job_costs)
+        period_revenue = calculate_project_revenue(period_timesheet, data_manager.df_employees, data_manager.job_costs)
 
         # Timeline Chart (Man Hours/Days)
-        timeline_fig = create_timeline_chart(period_timesheet, df_tasks, selected_project, use_man_hours)
+        timeline_fig = create_timeline_chart(period_timesheet, data_manager.df_tasks, selected_project, use_man_hours)
 
         # Revenue Chart
-        revenue_fig = create_revenue_chart(period_timesheet, df_employees, df_tasks, job_costs, selected_project)
+        revenue_fig = create_revenue_chart(period_timesheet, data_manager.df_employees, data_manager.df_tasks, data_manager.job_costs, selected_project)
 
         # Tasks and Employees Chart
-        tasks_employees_fig = create_tasks_employees_chart(period_timesheet, df_tasks, selected_project)
+        tasks_employees_fig = create_tasks_employees_chart(period_timesheet, data_manager.df_tasks, selected_project)
 
         # Prepare revenue messages
         total_revenue_msg = f"Total Project Revenue: ${total_project_revenue:,.2f}"

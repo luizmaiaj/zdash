@@ -4,7 +4,9 @@ import dash
 import pandas as pd
 import ast
 
-def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_tasks):
+from data_management import DataManager
+
+def register_reporting_calback(app, data_manager: DataManager):
     @app.callback(
         Output('data-quality-report', 'children'),
         [Input('date-range', 'start_date'),
@@ -17,14 +19,14 @@ def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_
         report = []
         
         # Check for projects with no hours logged
-        if 'name' in df_projects.columns and 'project_name' in df_timesheet.columns:
-            projects_without_hours = set(df_projects['name']) - set(df_timesheet['project_name'])
+        if 'name' in data_manager.df_projects.columns and 'project_name' in data_manager.df_timesheet.columns:
+            projects_without_hours = set(data_manager.df_projects['name']) - set(data_manager.df_timesheet['project_name'])
         else:
             projects_without_hours = set()
         
         # Check for employees with no hours logged
-        if 'name' in df_employees.columns and 'employee_name' in df_timesheet.columns:
-            employees_without_hours = set(df_employees['name']) - set(df_timesheet['employee_name'])
+        if 'name' in data_manager.df_employees.columns and 'employee_name' in df_timesheet.columns:
+            employees_without_hours = set(data_manager.df_employees['name']) - set(data_manager.df_timesheet['employee_name'])
         else:
             employees_without_hours = set()
         
@@ -46,9 +48,9 @@ def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_
         ]))
         
         # Check for inconsistent project status (closed projects with open tasks)
-        if 'active' in df_projects.columns and 'name' in df_projects.columns and 'date_end' in df_tasks.columns and 'project_name' in df_tasks.columns:
-            closed_projects = df_projects[df_projects['active'] == False]['name']
-            open_tasks = df_tasks[df_tasks['date_end'].isna()]['project_name']
+        if 'active' in data_manager.df_projects.columns and 'name' in data_manager.df_projects.columns and 'date_end' in data_manager.df_tasks.columns and 'project_name' in data_manager.df_tasks.columns:
+            closed_projects = data_manager.df_projects[df_projects['active'] == False]['name']
+            open_tasks = data_manager.df_tasks[df_tasks['date_end'].isna()]['project_name']
             inconsistent_projects = set(closed_projects) & set(open_tasks)
             if inconsistent_projects:
                 report.append(html.P(f"Closed projects with open tasks: {', '.join(inconsistent_projects)}"))
@@ -65,9 +67,9 @@ def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_
         end_date = pd.to_datetime(end_date)
 
         # Filter timesheet data based on date range
-        filtered_timesheet = df_timesheet[
-            (df_timesheet['date'] >= start_date) &
-            (df_timesheet['date'] <= end_date)
+        filtered_timesheet = data_manager.df_timesheet[
+            (data_manager.df_timesheet['date'] >= start_date) &
+            (data_manager.df_timesheet['date'] <= end_date)
         ].copy()
 
         # Filter timesheets longer than 8 hours
@@ -78,8 +80,8 @@ def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_
 
         # Merge with tasks to get task names
         long_timesheets['task_id'] = long_timesheets['task_id'].astype(str)
-        df_tasks['id'] = df_tasks['id'].astype(str)
-        merged_data = pd.merge(long_timesheets, df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
+        data_manager.df_tasks['id'] = data_manager.df_tasks['id'].astype(str)
+        merged_data = pd.merge(long_timesheets, data_manager.df_tasks[['id', 'name']], left_on='task_id', right_on='id', how='left')
 
         # Function to safely extract task name
         def extract_task_name(task_id):
@@ -139,15 +141,12 @@ def register_reporting_calback(app, df_projects, df_employees, df_timesheet, df_
     @app.callback(
         [Output('job-costs-table', 'data'),
          Output('employees-job-titles-table', 'data')],
-        [Input('date-range', 'start_date'),
-         Input('date-range', 'end_date'),
-         Input('project-filter', 'value'),
-         Input('employee-filter', 'value'),
+        [Input('employee-filter', 'value'),
          Input('tabs', 'value')],
         [State('job-costs-table', 'data'),
          State('employees-job-titles-table', 'data')]
     )
-    def update_settings_tables(start_date, end_date, selected_projects, selected_employees, current_tab, job_costs_data, employees_data):
+    def update_settings_tables(selected_employees, current_tab, job_costs_data, employees_data):
         if current_tab != 'Settings':
             return dash.no_update, dash.no_update
 

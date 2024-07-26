@@ -4,15 +4,14 @@ import plotly.graph_objs as go
 import pandas as pd
 import dash
 from datetime import datetime
-import json
-import os
 
-from data_management import deserialize_dataframes, save_financials_data, set_last_calculation_time
+from data_management import DataManager
 from callbacks.project import calculate_project_revenue
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet, job_costs, financials_data):
+def register_financials_callbacks(app, data_manager: DataManager):
     @app.callback(
         [Output('financials-chart', 'figure'),
          Output('total-revenue-display', 'children'),
@@ -26,11 +25,6 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet,
     )
     def update_financials(start_date, end_date, n_clicks):
         logger.debug("Entering update_financials callback")
-        logger.debug(f"Data types: portfolio={type(df_portfolio)}, employees={type(df_employees)}, timesheet={type(df_timesheet)}, tasks={type(financials_data)}")
-        logger.debug(f"DataFrame shapes: portfolio={df_portfolio.shape}, employees={df_employees.shape}, timesheet={df_timesheet.shape}, tasks={len(financials_data)}")
-        logger.debug(f"Timesheet columns: {df_timesheet.columns}")
-        logger.debug(f"Financials data: {len(financials_data)}")
-        print(financials_data)
 
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -48,9 +42,9 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet,
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
             
-            financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date)
-            save_financials_data(financials_data)
-            set_last_calculation_time(datetime.now())
+            financials_data = calculate_all_financials(data_manager, start_date, end_date)
+            data_manager.save_financials_data(financials_data)
+            data_manager.set_last_calculation_time(datetime.now())
 
             if not financials_data:
                 empty_fig = go.Figure()
@@ -63,7 +57,7 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet,
                     False
                 ]
 
-            fig_financials = create_financials_chart(financials_data, df_employees, job_costs)
+            fig_financials = create_financials_chart(financials_data, data_manager.df_employees, data_manager.job_costs)
             fig_hours = create_hours_chart(financials_data)
             fig_revenue = create_revenue_chart(financials_data)
 
@@ -89,13 +83,13 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet,
                 False
             ]
 
-def calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date):
+def calculate_all_financials(data_manager: DataManager, start_date, end_date):
     logger.debug("Calculating all financials")
     
     financials_data = {}
     
     # Ensure we have a date column in df_timesheet
-    date_column = next((col for col in df_timesheet.columns if 'date' in col.lower()), None)
+    date_column = next((col for col in data_manager.df_timesheet.columns if 'date' in col.lower()), None)
     if not date_column:
         logger.error("No date column found in timesheet data")
         return financials_data
@@ -104,24 +98,24 @@ def calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs
     
     # Convert date column to datetime
     try:
-        df_timesheet[date_column] = pd.to_datetime(df_timesheet[date_column], errors='coerce')
-        df_timesheet = df_timesheet.dropna(subset=[date_column])  # Remove rows with invalid dates
+        data_manager.df_timesheet[date_column] = pd.to_datetime(data_manager.df_timesheet[date_column], errors='coerce')
+        data_manager.df_timesheet = data_manager.df_timesheet.dropna(subset=[date_column])  # Remove rows with invalid dates
     except Exception as e:
         logger.error(f"Error converting date column to datetime: {str(e)}")
         return financials_data
     
-    for _, project in df_portfolio.iterrows():
+    for _, project in data_manager.df_portfolio.iterrows():
         project_name = project['name']
-        project_timesheet = df_timesheet[
-            (df_timesheet['project_name'] == project_name) &
-            (df_timesheet[date_column] >= start_date) &
-            (df_timesheet[date_column] <= end_date)
+        project_timesheet = data_manager.df_timesheet[
+            (data_manager.df_timesheet['project_name'] == project_name) &
+            (data_manager.df_timesheet[date_column] >= start_date) &
+            (data_manager.df_timesheet[date_column] <= end_date)
         ]
         
         if project_timesheet.empty:
             continue
         
-        project_revenue = calculate_project_revenue(project_timesheet, df_employees, job_costs)
+        project_revenue = calculate_project_revenue(project_timesheet, data_manager.df_employees, data_manager.job_costs)
         project_hours = project_timesheet['unit_amount'].sum()
         
         daily_data = project_timesheet.groupby(date_column).agg({

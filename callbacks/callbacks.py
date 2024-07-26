@@ -2,7 +2,8 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import dash
 import pandas as pd
-from data_management import load_or_fetch_data, serialize_dataframes, deserialize_dataframes, get_last_update_time
+from data_management import DataManager
+from datetime import datetime
 
 from callbacks.global_kpi import register_global_kpi_callbacks
 from callbacks.financials import register_financials_callbacks
@@ -18,15 +19,15 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def register_callbacks(app, data_manager):
+def register_callbacks(app, data_manager: DataManager):
     register_global_kpi_callbacks(app, data_manager)
     register_financials_callbacks(app, data_manager)
     register_portfolio_callbacks(app, data_manager)
-    register_employees_callbacks(app, df_timesheet)
-    register_llm_callback(app)
-    register_project_callback(app, df_timesheet, df_tasks, df_employees, job_costs)
-    register_reporting_calback(app, df_portfolio, df_employees, df_timesheet, df_tasks)
-    register_settings_callbacks(app, df_employees)
+    register_employees_callbacks(app, data_manager)
+    register_llm_callback(app, data_manager)
+    register_project_callback(app, data_manager)
+    register_reporting_calback(app, data_manager)
+    register_settings_callbacks(app, data_manager)
 
     @app.callback(
         [Output('data-store', 'data'),
@@ -38,18 +39,24 @@ def register_callbacks(app, data_manager):
         ctx = dash.callback_context
         if not ctx.triggered:
             # Initial load
-            data, last_updated = load_or_fetch_data(force=False)
+            data_manager.load_all_data()
         else:
             # Button click, force refresh
-            data, last_updated = load_or_fetch_data(force=True)
+            data_manager.load_all_data(force=True)
         
-        if data:
-            serialized_data = serialize_dataframes(data)
-            return serialized_data, f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
+        if not data_manager.df_portfolio.empty:
+            serialized_data = DataManager.serialize_dataframes([
+                data_manager.df_portfolio,
+                data_manager.df_employees,
+                data_manager.df_sales,
+                data_manager.df_timesheet,
+                data_manager.df_tasks
+            ])
+            return serialized_data, f"Last updated: {data_manager.last_update.strftime('%Y-%m-%d %H:%M:%S')}"
         else:
             # If refresh failed and we don't have current data, return empty DataFrames
-            empty_data = [pd.DataFrame() for _ in range(6)]
-            serialized_empty_data = serialize_dataframes(empty_data)
+            empty_data = [pd.DataFrame() for _ in range(5)]
+            serialized_empty_data = DataManager.serialize_dataframes(empty_data)
             return serialized_empty_data, "Failed to update data"
 
     @app.callback(
@@ -60,7 +67,7 @@ def register_callbacks(app, data_manager):
     def update_filter_options(serialized_data):
         if serialized_data is None:
             return [], []
-        data = deserialize_dataframes(serialized_data)
+        data = DataManager.deserialize_dataframes(serialized_data)
         df_projects, df_employees = data[:2]
         project_options = [{'label': i, 'value': i} for i in df_projects['name'].unique() if pd.notna(i)]
         employee_options = [{'label': i, 'value': i} for i in df_employees['name'].unique() if pd.notna(i)]
@@ -77,25 +84,25 @@ def register_callbacks(app, data_manager):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
-        print("Sales columns:", df_sales.columns)
+        print("Sales columns:", data_manager.df_sales.columns)
 
         # Check if 'date_order' column exists, if not, try to find an alternative
         date_column = 'date_order'
-        if date_column not in df_sales.columns:
-            date_columns = [col for col in df_sales.columns if 'date' in col.lower()]
+        if date_column not in data_manager.df_sales.columns:
+            date_columns = [col for col in data_manager.df_sales.columns if 'date' in col.lower()]
             if date_columns:
                 date_column = date_columns[0]
             else:
                 return go.Figure()  # Return empty figure if no suitable date column found
         
-        filtered_sales = df_sales[
-            (df_sales[date_column] >= start_date) &
-            (df_sales[date_column] <= end_date)
+        filtered_sales = data_manager.df_sales[
+            (data_manager.df_sales[date_column] >= start_date) &
+            (data_manager.df_sales[date_column] <= end_date)
         ]
         
-        filtered_tasks = df_tasks[
-            (df_tasks['create_date'] >= start_date) &
-            (df_tasks['create_date'] <= end_date)
+        filtered_tasks = data_manager.df_tasks[
+            (data_manager.df_tasks['create_date'] >= start_date) &
+            (data_manager.df_tasks['create_date'] <= end_date)
         ]
         
         if task_filter:

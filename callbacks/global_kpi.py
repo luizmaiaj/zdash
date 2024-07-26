@@ -2,21 +2,22 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 
-def register_global_kpi_callbacks(app, df_projects):
+from data_management import DataManager
+
+def register_global_kpi_callbacks(app, data_manager: DataManager):
     @app.callback(
         [Output('global-map', 'figure'),
         Output('global-kpi-chart', 'figure')],
         [Input('date-range', 'start_date'),
         Input('date-range', 'end_date'),
-        Input('project-filter', 'value'),
-        Input('employee-filter', 'value')]
+        Input('project-filter', 'value')]
     )
-    def update_global_kpi(start_date, end_date, selected_projects, selected_employees):
+    def update_global_kpi(start_date, end_date, selected_projects):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
         
-        filtered_projects = df_projects.copy()
-        if 'date_start' in df_projects.columns:
+        filtered_projects = data_manager.df_portfolio.copy()
+        if 'date_start' in data_manager.df_portfolio.columns:
             filtered_projects = filtered_projects[
                 (filtered_projects['date_start'] >= start_date) &
                 (filtered_projects['date_start'] <= end_date)

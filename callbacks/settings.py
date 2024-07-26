@@ -1,14 +1,14 @@
 from dash.dependencies import Input, Output, State
 from dash import html
 import dash
-from data_management import save_job_costs
+from data_management import DataManager
 
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def register_settings_callbacks(app, df_employees):
+def register_settings_callbacks(app, data_manager: DataManager):
     @app.callback(
         Output('job-costs-save-status', 'children'),
         Input('save-cost-revenue', 'n_clicks'),
@@ -20,7 +20,7 @@ def register_settings_callbacks(app, df_employees):
 
         try:
             job_costs = {item['job_title']: {'cost': item['cost'], 'revenue': item['revenue']} for item in table_data if item['job_title']}
-            save_job_costs(job_costs)
+            data_manager.save_job_costs(job_costs)
             return html.Div("Job costs saved successfully", style={'color': 'green'})
         except Exception as e:
             return html.Div(f"Error saving job costs: {str(e)}", style={'color': 'red'})
@@ -40,15 +40,11 @@ def register_settings_callbacks(app, df_employees):
 
     @app.callback(
         Output('job-costs-table', 'data', allow_duplicate=True),
-        [Input('date-range', 'start_date'),
-        Input('date-range', 'end_date'),
-        Input('project-filter', 'value'),
-        Input('employee-filter', 'value'),
-        Input('tabs', 'value')],
+        [Input('tabs', 'value')],
         [State('job-costs-table', 'data')],
         prevent_initial_call=True
     )
-    def update_job_costs_table(start_date, end_date, selected_projects, selected_employees, current_tab, current_data):
+    def update_job_costs_table(current_tab, current_data):
         if current_tab != 'Settings':
             return dash.no_update
 
@@ -57,10 +53,10 @@ def register_settings_callbacks(app, df_employees):
 
         # Get job titles from employees
         employee_job_titles = set()
-        if 'job_title' in df_employees.columns:
-            employee_job_titles = set(df_employees['job_title'].dropna().unique())
-        elif 'job_id' in df_employees.columns:
-            employee_job_titles = set(df_employees['job_id'].dropna().apply(lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else x).unique())
+        if 'job_title' in data_manager.df_employees.columns:
+            employee_job_titles = set(data_manager.df_employees['job_title'].dropna().unique())
+        elif 'job_id' in data_manager.df_employees.columns:
+            employee_job_titles = set(data_manager.df_employees['job_id'].dropna().apply(lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else x).unique())
 
         # Combine all job titles
         unique_job_titles = all_job_titles.union(employee_job_titles)
