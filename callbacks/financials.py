@@ -52,7 +52,7 @@ def register_financials_callbacks(app, data_manager: DataManager):
                     False
                 ]
 
-            fig_financials = create_financials_chart(financials_data)
+            fig_financials = create_financials_chart(financials_data, data_manager)
             fig_hours = create_hours_chart(financials_data)
             fig_revenue = create_revenue_chart(financials_data)
 
@@ -135,7 +135,7 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
     
     return financials_data
 
-def create_financials_chart(financials_data):
+def create_financials_chart(financials_data, data_manager):
     fig = go.Figure()
     
     # Create a DataFrame to hold all daily revenue data
@@ -146,6 +146,20 @@ def create_financials_chart(financials_data):
         if daily_data.empty:
             logger.warning(f"No daily data for project: {project}")
             continue
+        
+        # Calculate daily revenue if not present
+        if 'revenue' not in daily_data.columns:
+            daily_data['revenue'] = daily_data.apply(
+                lambda row: calculate_project_revenue(
+                    data_manager.df_timesheet[
+                        (data_manager.df_timesheet['project_name'] == project) &
+                        (data_manager.df_timesheet['date'] == row['date'])
+                    ],
+                    data_manager.df_employees,
+                    data_manager.job_costs
+                ),
+                axis=1
+            )
         
         daily_data['project'] = project
         all_daily_data.append(daily_data)
