@@ -11,7 +11,7 @@ from callbacks.projects import register_portfolio_callbacks
 from callbacks.employees import register_employees_callbacks
 from callbacks.llm import register_llm_callback
 from callbacks.project import register_project_callback
-from callbacks.reporting import register_reporting_calback
+from callbacks.reporting import register_reporting_callback
 from callbacks.settings import register_settings_callbacks
 from callbacks.pivot_table import register_pivot_table_callbacks
 
@@ -27,7 +27,7 @@ def register_callbacks(app, data_manager: DataManager):
     register_employees_callbacks(app, data_manager)
     register_llm_callback(app, data_manager)
     register_project_callback(app, data_manager)
-    register_reporting_calback(app, data_manager)
+    register_reporting_callback(app, data_manager)
     register_settings_callbacks(app, data_manager)
     register_pivot_table_callbacks(app, data_manager)
 
