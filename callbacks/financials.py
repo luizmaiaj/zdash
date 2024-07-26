@@ -43,15 +43,9 @@ def register_financials_callbacks(app, data_manager: DataManager):
 
             if not financials_data:
                 empty_fig = go.Figure()
-                return [
-                    empty_fig,
-                    "No data available. Please check your date range.",
-                    empty_fig,
-                    empty_fig,
-                    "No data available. Please check your date range.",
-                    False
-                ]
+                return empty_fig, "No data available", empty_fig, empty_fig, "No data available. Please check your date range."
 
+            logger.info("Creating charts")
             fig_financials = create_financials_chart(financials_data, data_manager)
             fig_hours = create_hours_chart(financials_data)
             fig_revenue = create_revenue_chart(financials_data)
