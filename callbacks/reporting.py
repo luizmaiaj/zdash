@@ -1,5 +1,5 @@
+import logging
 from dash.dependencies import Input, Output
-
 from data_management import DataManager
 from data_quality_reporter import DataQualityReporter
 

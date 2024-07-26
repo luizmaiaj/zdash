@@ -1,3 +1,4 @@
+import logging
 from langchain_community.chat_models import ChatOllama
 from langchain.prompts import ChatPromptTemplate
 import pandas as pd

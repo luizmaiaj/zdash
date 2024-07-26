@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 import ast
 
+import logging
+
 import dash
 from dash import dcc, html, dash_table
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
-import logging
 
 from callbacks.callbacks import register_callbacks
 from llm_integration import check_ollama_status, extract_model_names
@@ -13,9 +14,10 @@ from data_management import DataManager
 
 load_dotenv(find_dotenv())
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# Configure logging
+logging.basicConfig(level=logging.WARNING,
+                    format='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 # Function to safely get DataFrame columns and process job_id
 def safe_get_columns(df, columns):
@@ -36,7 +38,7 @@ def safe_unique_values(df, column_name):
     if column_name in df.columns:
         return [{'label': i, 'value': i} for i in sorted(df[column_name].unique()) if pd.notna(i)]
     else:
-        print(f"Warning: '{column_name}' column not found in DataFrame")
+        logging.warning(f"Column not found in DataFrame '{column_name}' ")
         return []
 
 def create_app():
@@ -44,7 +46,7 @@ def create_app():
     data_manager = DataManager()
 
     if data_manager.df_portfolio is None or data_manager.df_portfolio.empty:
-        print("Error: Unable to fetch data from Odoo. Please check your connection and try again.")
+        logging.error("Unable to fetch data from Odoo. Please check your connection and try again.")
         return None
 
     # Process df_employees to extract job titles
@@ -308,14 +310,14 @@ def create_app():
 
     # Register callbacks after all data is loaded
     register_callbacks(app, data_manager)
-    logger.debug("Callbacks registered")
+    logging.debug("Callbacks registered")
 
     return app
 
 if __name__ == '__main__':
     app = create_app()
     if app:
-        logger.info("Starting Dash server")
+        logging.info("Starting Dash server")
         app.run_server(debug=True)
     else:
-        logger.error("Failed to create app")
+        logging.error("Failed to create app")

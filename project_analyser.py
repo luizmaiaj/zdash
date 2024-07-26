@@ -1,18 +1,16 @@
+import ast
+import logging
 import pandas as pd
 import plotly.graph_objs as go
-import logging
-import ast
 
 from data_management import DataManager
-
-logger = logging.getLogger(__name__)
 
 class ProjectAnalyser:
     def __init__(self, data_manager: DataManager):
         self.data_manager = data_manager
 
     def analyse_project(self, selected_project, start_date, end_date, selected_employees, use_man_hours):
-        logger.info(f"Analyzing project: {selected_project}")
+        logging.info(f"Analyzing project: {selected_project}")
         if not selected_project:
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
@@ -22,7 +20,7 @@ class ProjectAnalyser:
         project_timesheet = self.data_manager.df_timesheet[self.data_manager.df_timesheet['project_name'] == selected_project].copy()
 
         if project_timesheet.empty:
-            logger.warning(f"No timesheet data found for project: {selected_project}")
+            logging.warning(f"No timesheet data found for project: {selected_project}")
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
         total_project_revenue = self.calculate_project_revenue(project_timesheet)
@@ -36,7 +34,7 @@ class ProjectAnalyser:
             period_timesheet = period_timesheet[period_timesheet['employee_name'].isin(selected_employees)]
 
         period_revenue = self.calculate_project_revenue(period_timesheet)
-        logger.info(f"Period revenue calculated: {period_revenue}")
+        logging.info(f"Period revenue calculated: {period_revenue}")
 
         timeline_fig = self.create_timeline_chart(period_timesheet, self.data_manager.df_tasks, selected_project, use_man_hours)
         revenue_fig = self.create_revenue_chart(period_timesheet, self.data_manager.df_employees, self.data_manager.df_tasks, self.data_manager.job_costs, selected_project)
@@ -55,7 +53,7 @@ class ProjectAnalyser:
         for _, row in timesheet_data.iterrows():
             employee_data = self.data_manager.df_employees[self.data_manager.df_employees['name'] == row['employee_name']]
             if employee_data.empty:
-                logger.warning(f"Employee {row['employee_name']} not found in employees data")
+                logging.warning(f"Employee {row} not found in employees data")
                 continue
             
             employee = employee_data.iloc[0]
@@ -65,7 +63,7 @@ class ProjectAnalyser:
             try:
                 daily_revenue = float(job_cost_data.get('revenue') or 0)
             except (ValueError, AttributeError):
-                logger.warning(f"Invalid revenue data for job title: {job_title}")
+                logging.warning(f"Invalid revenue data for job title: {job_title}")
                 daily_revenue = 0
             
             entry_revenue = (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
@@ -76,7 +74,7 @@ class ProjectAnalyser:
         daily_effort = timesheet_data.copy()
         
         if not isinstance(tasks_data, pd.DataFrame):
-            logger.warning("tasks_data is not a DataFrame. Skipping task name merge.")
+            logging.warning("tasks_data is not a DataFrame. Skipping task name merge.")
             daily_effort['task_name'] = daily_effort['task_id']
         else:
             daily_effort['task_id_str'] = daily_effort['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
@@ -88,7 +86,7 @@ class ProjectAnalyser:
             if 'name' in daily_effort.columns:
                 daily_effort['task_name'] = daily_effort['name'].fillna(daily_effort['task_id_str'])
             else:
-                logger.warning("'name' column not found after merge. Using 'task_id_str' as task name.")
+                logging.warning("'name' column not found after merge. Using 'task_id_str' as task name.")
                 daily_effort['task_name'] = daily_effort['task_id_str']
         
         daily_effort = daily_effort.groupby(['date', 'employee_name', 'task_name'])['unit_amount'].sum().reset_index()
@@ -135,7 +133,7 @@ class ProjectAnalyser:
         daily_revenue['task_id_str'] = daily_revenue['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
 
         if not isinstance(tasks_data, pd.DataFrame):
-            logger.warning("tasks_data is not a DataFrame. Skipping task name merge.")
+            logging.warning("tasks_data is not a DataFrame. Skipping task name merge.")
             daily_revenue['task_name'] = daily_revenue['task_id_str']
         else:
             tasks_data['id_str'] = tasks_data['id'].astype(str)
@@ -146,7 +144,7 @@ class ProjectAnalyser:
             if 'name' in daily_revenue.columns:
                 daily_revenue['task_name'] = daily_revenue['name'].fillna(daily_revenue['task_id_str'])
             else:
-                logger.warning("'name' column not found after merge. Using 'task_id_str' as task name.")
+                logging.warning("'name' column not found after merge. Using 'task_id_str' as task name.")
                 daily_revenue['task_name'] = daily_revenue['task_id_str']
         
         daily_revenue = daily_revenue.groupby(['date', 'employee_name', 'task_name'])[['revenue', 'unit_amount']].sum().reset_index()
@@ -186,7 +184,7 @@ class ProjectAnalyser:
         timesheet_copy['task_id_str'] = timesheet_copy['task_id'].apply(lambda x: str(x) if isinstance(x, list) else x)
 
         if not isinstance(tasks_data, pd.DataFrame):
-            logger.warning("tasks_data is not a DataFrame. Using task_id as task name.")
+            logging.warning("tasks_data is not a DataFrame. Using task_id as task name.")
             timesheet_copy['task_name'] = timesheet_copy['task_id_str']
         else:
             tasks_data['id_str'] = tasks_data['id'].astype(str)
@@ -239,7 +237,7 @@ class ProjectAnalyser:
     def calculate_entry_revenue(self, row, employees_data, job_costs):
         employee_data = employees_data[employees_data['name'] == row['employee_name']]
         if employee_data.empty:
-            logger.warning(f"Employee {row['employee_name']} not found in employees data")
+            logging.warning(f"Employee {row} not found in employees data")
             return 0
         
         employee = employee_data.iloc[0]
@@ -254,12 +252,12 @@ class ProjectAnalyser:
                 job_id_list = ast.literal_eval(employee['job_id'])
                 return job_id_list[1] if len(job_id_list) > 1 else 'Unknown'
             except (ValueError, SyntaxError, IndexError) as e:
-                logger.error(f"Job title not found: {e}")
+                logging.error(f"Job title not found: {e}")
                 return 'Unknown'
         elif 'job_title' in employee:
             return employee['job_title']
         else:
-            logger.warning(f"Job title not found: {employee}")
+            logging.warning(f"Job title not found: {employee}")
             return 'Unknown'
 
     @staticmethod

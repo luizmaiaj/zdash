@@ -1,3 +1,4 @@
+import logging
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import dash
@@ -14,11 +15,6 @@ from callbacks.project import register_project_callback
 from callbacks.reporting import register_reporting_callback
 from callbacks.settings import register_settings_callbacks
 from callbacks.pivot_table import register_pivot_table_callbacks
-
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 def register_callbacks(app, data_manager: DataManager):
     register_global_kpi_callbacks(app, data_manager)
@@ -85,8 +81,6 @@ def register_callbacks(app, data_manager: DataManager):
     def update_sales(start_date, end_date, n_clicks, task_filter):
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
-        
-        print("Sales columns:", data_manager.df_sales.columns)
 
         # Check if 'date_order' column exists, if not, try to find an alternative
         date_column = 'date_order'

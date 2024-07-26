@@ -3,13 +3,10 @@ import os
 import pickle
 import json
 from datetime import datetime, timedelta
-import pandas as pd
 from typing import List, Dict, Optional
-from odoo import fetch_and_process_data
-
+import pandas as pd
 import logging
-
-logger = logging.getLogger(__name__)
+from odoo import fetch_and_process_data
 
 @dataclass
 class DataManager:
@@ -27,17 +24,26 @@ class DataManager:
     job_costs: Dict = field(default_factory=dict)
     financials_data: Dict = field(default_factory=dict)
     last_update: Optional[datetime] = None
+    data_loaded: bool = field(default_factory=bool)
 
     def __post_init__(self):
+        self.data_loaded = False
         self.load_all_data()
 
-    def load_all_data(self):
-        data, self.last_update = self.load_or_fetch_data()
+    def load_all_data(self, force: bool = False):
+        if self.data_loaded and not force:
+            logging.warning('Data already loaded')
+            return
+        
+        logging.info('Loading data with force = %s', force)
+        data, self.last_update = self.load_or_fetch_data(force)
         self.df_portfolio, self.df_employees, self.df_sales, self.df_timesheet, self.df_tasks = data
         self.job_costs = self.load_job_costs()
         self.financials_data = self.load_financials_data()
 
         self.process_job_titles() # check for any new job titles
+
+        self.data_loaded = True
 
         self.print_data_summary()
 
@@ -49,26 +55,26 @@ class DataManager:
                 lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else x
             ).unique()
         else:
-            logger.warning("No job title or job id column found in employees data")
+            logging.warning("No job title or job id column found in employees data")
             return
 
         for title in unique_job_titles:
             if title and title not in self.job_costs:
                 self.job_costs[title] = {'cost': '', 'revenue': ''}
         
-        logger.info(f"Processed job titles. Total unique titles: {len(unique_job_titles)}")
+        logging.info(f"Processed job titles. Total unique titles: {len(unique_job_titles)}")
     
     def print_data_summary(self):
-        print("\n--- Data Summary ---")
-        print(f"Portfolio: {len(self.df_portfolio)} projects")
-        print(f"Employees: {len(self.df_employees)} employees")
-        print(f"Sales: {len(self.df_sales)} records")
-        print(f"Timesheet: {len(self.df_timesheet)} entries")
-        print(f"Tasks: {len(self.df_tasks)} tasks")
-        print(f"Job Costs: {len(self.job_costs)} job titles")
-        print(f"Financials: {len(self.financials_data)} project financials")
-        print(f"Last Update: {self.last_update}")
-        print("--- End of Summary ---\n")
+        logging.info("\n--- Data Summary ---")
+        logging.info(f"Portfolio: {len(self.df_portfolio)} projects")
+        logging.info(f"Employees: {len(self.df_employees)} employees")
+        logging.info(f"Sales: {len(self.df_sales)} records")
+        logging.info(f"Timesheet: {len(self.df_timesheet)} entries")
+        logging.info(f"Tasks: {len(self.df_tasks)} tasks")
+        logging.info(f"Job Costs: {len(self.job_costs)} job titles")
+        logging.info(f"Financials: {len(self.financials_data)} project financials")
+        logging.info(f"Last Update: {self.last_update}")
+        logging.info("--- End of Summary ---\n")
 
     @staticmethod
     def serialize_dataframes(data: List[pd.DataFrame]) -> List[Dict]:
@@ -139,20 +145,20 @@ class DataManager:
         current_time = datetime.now()
 
         if cached_data is None or last_update is None:
-            logger.info("No cached data found. Fetching all data...")
+            logging.info("No cached data found. Fetching all data...")
             new_data = fetch_and_process_data()
             if new_data and all(df is not None for df in new_data):
                 self.save_cached_data(new_data)
                 self.set_last_update_time(current_time)
                 return new_data, current_time
             else:
-                logger.error("Failed to fetch data.")
+                logging.error("Failed to fetch data.")
                 return [pd.DataFrame() for _ in range(5)], current_time
 
-        logger.info(f"Loading cached data from {last_update}")
+        logging.info(f"Loading cached data from {last_update}")
         
         if force or (current_time - last_update) > timedelta(days=1):
-            logger.info("Cached data is old or force refresh requested. Fetching update...")
+            logging.info("Cached data is old or force refresh requested. Fetching update...")
             new_data = fetch_and_process_data(last_update - timedelta(hours=3))
             if new_data and all(df is not None for df in new_data):
                 merged_data = self.merge_new_data(cached_data, new_data)
@@ -160,7 +166,7 @@ class DataManager:
                 self.set_last_update_time(current_time)
                 return merged_data, current_time
             else:
-                logger.error("Failed to fetch update. Using cached data.")
+                logging.error("Failed to fetch update. Using cached data.")
         
         return cached_data, last_update
 
@@ -173,22 +179,22 @@ class DataManager:
             json.dump(self.financials_data, f, cls=DateTimeEncoder)
 
     def load_financials_data(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict:
-        logger.info(f"Loading financial data. Start date: {start_date}, End date: {end_date}")
+        logging.info(f"Loading financial data. Start date: {start_date}, End date: {end_date}")
         if os.path.exists(self.FINANCIALS_FILE):
             with open(self.FINANCIALS_FILE, 'r') as f:
                 data = json.load(f)
-            logger.info(f"Loaded data for {len(data)} projects from file")
+            logging.info(f"Loaded data for {len(data)} projects from file")
 
             filtered_data = {}
             for project, project_data in data.items():
-                logger.debug(f"Processing project: {project}")
+                logging.debug(f"Processing project: {project}")
                 filtered_daily_data = []
                 for daily_data in project_data['daily_data']:
                     date = pd.to_datetime(daily_data['date'])
                     if (start_date is None or date >= start_date) and (end_date is None or date <= end_date):
                         filtered_daily_data.append(daily_data)
                 
-                logger.debug(f"Project {project}: {len(filtered_daily_data)} days of data after date filtering")
+                logging.debug(f"Project {project}: {len(filtered_daily_data)} days of data after date filtering")
                 
                 if filtered_daily_data:
                     total_hours = sum(day['unit_amount'] for day in filtered_daily_data)
@@ -202,21 +208,21 @@ class DataManager:
                         'total_hours': total_hours,
                         'daily_data': filtered_daily_data
                     }
-                    logger.debug(f"Project {project} calculated revenue: {prorated_revenue}")
+                    logging.debug(f"Project {project} calculated revenue: {prorated_revenue}")
 
             # If no data falls within the specified range, return all available data
             if not filtered_data:
-                logger.warning("No data found within specified date range. Returning all available data.")
+                logging.warning("No data found within specified date range. Returning all available data.")
                 return data
 
             total_revenue = sum(project_data['total_revenue'] for project_data in filtered_data.values())
             total_hours = sum(project_data['total_hours'] for project_data in filtered_data.values())
-            logger.info(f"Total revenue across all projects: {total_revenue}")
-            logger.info(f"Total hours across all projects: {total_hours}")
+            logging.info(f"Total revenue across all projects: {total_revenue}")
+            logging.info(f"Total hours across all projects: {total_hours}")
 
             return filtered_data
         else:
-            logger.warning(f"Financial data file {self.FINANCIALS_FILE} not found")
+            logging.warning(f"Financial data file {self.FINANCIALS_FILE} not found")
             return {}
 
     def get_last_calculation_time(self) -> Optional[datetime]:

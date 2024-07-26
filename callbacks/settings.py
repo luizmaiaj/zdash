@@ -1,12 +1,8 @@
+import logging
 from dash.dependencies import Input, Output, State
 from dash import html
 import dash
 from data_management import DataManager
-
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 def register_settings_callbacks(app, data_manager: DataManager):
     @app.callback(
@@ -60,16 +56,16 @@ def register_settings_callbacks(app, data_manager: DataManager):
 
         # Combine all job titles
         unique_job_titles = all_job_titles.union(employee_job_titles)
-        logger.debug(f"Combined unique job titles: {unique_job_titles}")
+        logging.debug(f"Combined unique job titles: {unique_job_titles}")
 
         # If there are no job titles, return the current data
         if not unique_job_titles:
-            logger.warning("No job titles found. Returning current data.")
+            logging.warning("No job titles found. Returning current data.")
             return current_data
 
         # Filter job costs data, but keep all entries if no matching job titles
         filtered_job_costs = [cost for cost in current_data if cost['job_title'] in unique_job_titles] or current_data
 
-        logger.debug(f"Filtered job costs: {filtered_job_costs}")
+        logging.debug(f"Filtered job costs: {filtered_job_costs}")
 
         return filtered_job_costs

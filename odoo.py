@@ -1,5 +1,6 @@
 import os
 import xmlrpc.client
+import logging
 import pandas as pd
 
 # Odoo API connection
@@ -19,7 +20,7 @@ def fetch_odoo_data(model, fields, domain=[], limit=None):
         cleaned_result = [{k: v for k, v in record.items() if v is not None} for record in result]
         return cleaned_result
     except Exception as err:
-        print(f"Error fetching data from Odoo, model {model}, fields {fields}, domain {domain}, limit {limit}: {err}")
+        logging.error(f"Error fetching data from Odoo, model {model}, fields {fields}, domain {domain}, limit {limit}: {err}")
         return []
 
 def validate_dataframe(df, required_columns):
@@ -45,7 +46,6 @@ def fetch_and_process_data(last_update=None):
         portfolio = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'], domain=base_domain)
         employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id', 'job_title'], domain=base_domain)
         sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'], domain=base_domain)
-        # financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'], domain=base_domain)
         timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'task_id', 'project_id', 'unit_amount', 'date'], domain=base_domain)
         tasks = fetch_odoo_data('project.task', ['id', 'project_id', 'stage_id', 'name', 'create_date', 'date_end'], domain=base_domain)
 
@@ -53,17 +53,15 @@ def fetch_and_process_data(last_update=None):
         df_portfolio = validate_dataframe(pd.DataFrame(portfolio), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
         df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id', 'job_title'])
         df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
-        # df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
         df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
         df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
 
         # Print column names for debugging
-        print("df_portfolio columns:", df_portfolio.columns)
-        print("df_employees columns:", df_employees.columns)
-        print("df_sales columns:", df_sales.columns)
-        # print("df_financials columns:", df_financials.columns)
-        print("df_timesheet columns:", df_timesheet.columns)
-        print("df_tasks columns:", df_tasks.columns)
+        logging.info("df_portfolio columns:", df_portfolio.columns)
+        logging.info("df_employees columns:", df_employees.columns)
+        logging.info("df_sales columns:", df_sales.columns)
+        logging.info("df_timesheet columns:", df_timesheet.columns)
+        logging.info("df_tasks columns:", df_tasks.columns)
 
         # Convert date columns to datetime
         date_columns = {
@@ -99,7 +97,7 @@ def fetch_and_process_data(last_update=None):
 
         return df_portfolio, df_employees, df_sales, df_timesheet, df_tasks
     except Exception as e:
-        print(f"Error in fetch_and_process_data: {e}")
+        logging.error(f"Error in fetch_and_process_data: {e}")
         return None, None, None, None, None, None
 
 if __name__ == "__main__":
@@ -107,6 +105,6 @@ if __name__ == "__main__":
     data = fetch_and_process_data()
     for df in data:
         if df is not None:
-            print(df.head())
+            logging.info(df.head())
         else:
-            print("None")
+            logging.info("None")

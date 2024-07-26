@@ -1,13 +1,10 @@
 import ast
+import logging
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 import pandas as pd
 from data_management import DataManager
 from project_analyser import ProjectAnalyser
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 def register_project_callback(app, data_manager: DataManager):
     project_analyser = ProjectAnalyser(data_manager)
@@ -25,7 +22,7 @@ def register_project_callback(app, data_manager: DataManager):
          Input('man-hours-toggle', 'value')]
     )
     def update_project_charts(selected_project, start_date, end_date, selected_employees, use_man_hours):
-        logger.info(f"Updating project charts for project: {selected_project}")
+        logging.info(f"Updating project charts for project: {selected_project}")
         if not selected_project:
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
@@ -37,7 +34,7 @@ def register_project_callback(app, data_manager: DataManager):
             return timeline_fig, revenue_fig, tasks_employees_fig, total_revenue_msg, period_revenue_msg
         
         except Exception as e:
-            logger.error(f"Error in update_project_charts: {str(e)}", exc_info=True)
+            logging.error(f"Error in update_project_charts: {str(e)}", exc_info=True)
             return go.Figure(), go.Figure(), go.Figure(), f"Error: {str(e)}", ""
 
     @app.callback(
