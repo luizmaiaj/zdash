@@ -173,14 +173,37 @@ class DataManager:
         with open(self.FINANCIALS_FILE, 'w') as f:
             json.dump(self.financials_data, f, cls=DateTimeEncoder)
 
-    def load_financials_data(self) -> Dict:
+    def load_financials_data(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict:
         if os.path.exists(self.FINANCIALS_FILE):
             with open(self.FINANCIALS_FILE, 'r') as f:
                 data = json.load(f)
-            for project in data.values():
-                for daily_data in project['daily_data']:
-                    daily_data['date'] = pd.to_datetime(daily_data['date'])
-            return data
+            
+            filtered_data = {}
+            for project, project_data in data.items():
+                filtered_daily_data = []
+                for daily_data in project_data['daily_data']:
+                    date = pd.to_datetime(daily_data['date'])
+                    if (start_date is None or date >= start_date) and (end_date is None or date <= end_date):
+                        filtered_daily_data.append(daily_data)
+                
+                if filtered_daily_data:
+                    filtered_data[project] = {
+                        'total_revenue': project_data['total_revenue'],
+                        'total_hours': project_data['total_hours'],
+                        'daily_data': filtered_daily_data
+                    }
+            
+            # If no data falls within the specified range, return all available data
+            if not filtered_data:
+                logger.warning("No data found within specified date range. Returning all available data.")
+                return data
+            
+            # Recalculate total_revenue and total_hours for the filtered data
+            for project, project_data in filtered_data.items():
+                project_data['total_revenue'] = sum(day['revenue'] for day in project_data['daily_data'] if 'revenue' in day)
+                project_data['total_hours'] = sum(day['unit_amount'] for day in project_data['daily_data'] if 'unit_amount' in day)
+            
+            return filtered_data
         return {}
 
     def get_last_calculation_time(self) -> Optional[datetime]:

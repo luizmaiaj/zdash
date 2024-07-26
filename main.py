@@ -104,11 +104,17 @@ def create_app():
             dcc.Tab(label='Financials', children=[
                 html.Div([
                     html.Button('Calculate Financials', id='calculate-button', n_clicks=0),
-                    dcc.Graph(id='financials-chart'),
-                    html.Div(id='total-revenue-display'),
-                    dcc.Graph(id='all-projects-hours-chart'),
-                    dcc.Graph(id='all-projects-revenue-chart'),
-                    html.Div(id='calculation-progress')
+                    dcc.Loading(
+                        id="loading-financials",
+                        type="circle",
+                        children=[
+                            dcc.Graph(id='financials-chart'),
+                            html.Div(id='total-revenue-display'),
+                            dcc.Graph(id='all-projects-hours-chart'),
+                            dcc.Graph(id='all-projects-revenue-chart'),
+                            html.Div(id='calculation-progress')
+                        ]
+                    )
                 ])
             ]),
             dcc.Tab(label='Portfolio', children=[

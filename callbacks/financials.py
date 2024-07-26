@@ -33,7 +33,7 @@ def register_financials_callbacks(app, data_manager: DataManager):
             end_date = pd.to_datetime(end_date)
 
             # Load existing financial data if available
-            financials_data = data_manager.load_financials_data()
+            financials_data = data_manager.load_financials_data(start_date, end_date)
 
             if not financials_data or 'calculate-button' in ctx.triggered[0]['prop_id']:
                 # Calculate new financial data
