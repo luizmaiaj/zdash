@@ -118,11 +118,17 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
         project_revenue = calculate_project_revenue(project_timesheet, data_manager.df_employees, data_manager.job_costs)
         project_hours = project_timesheet['unit_amount'].sum()
         
+        # Convert task_id to string to ensure it's hashable
+        project_timesheet['task_id_str'] = project_timesheet['task_id'].astype(str)
+        
         daily_data = project_timesheet.groupby(date_column).agg({
             'unit_amount': 'sum',
-            'employee_name': lambda x: list(set(x)),
-            'task_id': lambda x: list(set(x))
+            'employee_name': lambda x: x.unique().tolist(),
+            'task_id_str': lambda x: x.unique().tolist()
         }).reset_index()
+        
+        # Rename task_id_str back to task_id in the result
+        daily_data = daily_data.rename(columns={'task_id_str': 'task_id'})
         
         project_financials = {
             'total_revenue': project_revenue,

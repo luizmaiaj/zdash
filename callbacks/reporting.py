@@ -19,13 +19,13 @@ def register_reporting_calback(app, data_manager: DataManager):
         report = []
         
         # Check for projects with no hours logged
-        if 'name' in data_manager.df_projects.columns and 'project_name' in data_manager.df_timesheet.columns:
-            projects_without_hours = set(data_manager.df_projects['name']) - set(data_manager.df_timesheet['project_name'])
+        if 'name' in data_manager.df_portfolio.columns and 'project_name' in data_manager.df_timesheet.columns:
+            projects_without_hours = set(data_manager.df_portfolio['name']) - set(data_manager.df_timesheet['project_name'])
         else:
             projects_without_hours = set()
         
         # Check for employees with no hours logged
-        if 'name' in data_manager.df_employees.columns and 'employee_name' in df_timesheet.columns:
+        if 'name' in data_manager.df_employees.columns and 'employee_name' in data_manager.df_timesheet.columns:
             employees_without_hours = set(data_manager.df_employees['name']) - set(data_manager.df_timesheet['employee_name'])
         else:
             employees_without_hours = set()
@@ -48,9 +48,9 @@ def register_reporting_calback(app, data_manager: DataManager):
         ]))
         
         # Check for inconsistent project status (closed projects with open tasks)
-        if 'active' in data_manager.df_projects.columns and 'name' in data_manager.df_projects.columns and 'date_end' in data_manager.df_tasks.columns and 'project_name' in data_manager.df_tasks.columns:
-            closed_projects = data_manager.df_projects[df_projects['active'] == False]['name']
-            open_tasks = data_manager.df_tasks[df_tasks['date_end'].isna()]['project_name']
+        if 'active' in data_manager.df_portfolio.columns and 'name' in data_manager.df_portfolio.columns and 'date_end' in data_manager.df_tasks.columns and 'project_name' in data_manager.df_tasks.columns:
+            closed_projects = data_manager.df_portfolio[data_manager.df_portfolio['active'] == False]['name']
+            open_tasks = data_manager.df_tasks[data_manager.df_tasks['date_end'].isna()]['project_name']
             inconsistent_projects = set(closed_projects) & set(open_tasks)
             if inconsistent_projects:
                 report.append(html.P(f"Closed projects with open tasks: {', '.join(inconsistent_projects)}"))
