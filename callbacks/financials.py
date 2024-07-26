@@ -7,46 +7,12 @@ from datetime import datetime
 import json
 import os
 
-from data_management import deserialize_dataframes
+from data_management import deserialize_dataframes, save_financials_data, set_last_calculation_time
 from callbacks.project import calculate_project_revenue
 
 logger = logging.getLogger(__name__)
 
-FINANCIALS_FILE = 'financials_data.json'
-LAST_CALCULATION_FILE = 'last_financials_calculation.json'
-
-class DateTimeEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, (pd.Timestamp, datetime)):
-            return obj.isoformat()
-        return super().default(obj)
-
-def save_financials_data(data):
-    with open(FINANCIALS_FILE, 'w') as f:
-        json.dump(data, f, cls=DateTimeEncoder)
-
-def load_financials_data():
-    if os.path.exists(FINANCIALS_FILE):
-        with open(FINANCIALS_FILE, 'r') as f:
-            data = json.load(f)
-        # Convert ISO format strings back to datetime objects
-        for project in data.values():
-            for daily_data in project['daily_data']:
-                daily_data['date'] = pd.to_datetime(daily_data['date'])
-        return data
-    return {}
-
-def get_last_calculation_time():
-    if os.path.exists(LAST_CALCULATION_FILE):
-        with open(LAST_CALCULATION_FILE, 'r') as f:
-            return datetime.fromisoformat(json.load(f)['time'])
-    return None
-
-def set_last_calculation_time(time):
-    with open(LAST_CALCULATION_FILE, 'w') as f:
-        json.dump({'time': time.isoformat()}, f)
-
-def register_financials_callbacks(app, df_portfolio, df_employees, df_financials, df_timesheet, df_tasks, job_costs):
+def register_financials_callbacks(app, df_portfolio, df_employees, df_timesheet, job_costs, financials_data):
     @app.callback(
         [Output('financials-chart', 'figure'),
          Output('total-revenue-display', 'children'),
@@ -56,11 +22,16 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_financials
          Output('calculate-button', 'disabled')],
         [Input('date-range', 'start_date'),
          Input('date-range', 'end_date'),
-         Input('calculate-button', 'n_clicks')],
-        [State('data-store', 'data')]  # Add this line to get the current data from the store
+         Input('calculate-button', 'n_clicks')]
     )
-    def update_financials(start_date, end_date, n_clicks, data_store):
+    def update_financials(start_date, end_date, n_clicks):
         logger.debug("Entering update_financials callback")
+        logger.debug(f"Data types: portfolio={type(df_portfolio)}, employees={type(df_employees)}, timesheet={type(df_timesheet)}, tasks={type(financials_data)}")
+        logger.debug(f"DataFrame shapes: portfolio={df_portfolio.shape}, employees={df_employees.shape}, timesheet={df_timesheet.shape}, tasks={len(financials_data)}")
+        logger.debug(f"Timesheet columns: {df_timesheet.columns}")
+        logger.debug(f"Financials data: {len(financials_data)}")
+        print(financials_data)
+
         ctx = dash.callback_context
         if not ctx.triggered:
             empty_fig = go.Figure()
@@ -77,14 +48,7 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_financials
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
             
-            # Deserialize the data from the store
-            df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks = deserialize_dataframes(data_store)
-            
-            logger.debug(f"Data types: portfolio={type(df_portfolio)}, employees={type(df_employees)}, timesheet={type(df_timesheet)}, tasks={type(df_tasks)}")
-            logger.debug(f"DataFrame shapes: portfolio={df_portfolio.shape}, employees={df_employees.shape}, timesheet={df_timesheet.shape}, tasks={df_tasks.shape}")
-            logger.debug(f"Timesheet columns: {df_timesheet.columns}")
-            
-            financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs, start_date, end_date)
+            financials_data = calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date)
             save_financials_data(financials_data)
             set_last_calculation_time(datetime.now())
 
@@ -125,7 +89,7 @@ def register_financials_callbacks(app, df_portfolio, df_employees, df_financials
                 False
             ]
 
-def calculate_all_financials(df_portfolio, df_employees, df_timesheet, df_tasks, job_costs, start_date, end_date):
+def calculate_all_financials(df_portfolio, df_employees, df_timesheet, job_costs, start_date, end_date):
     logger.debug("Calculating all financials")
     
     financials_data = {}

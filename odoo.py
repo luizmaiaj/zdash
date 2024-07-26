@@ -45,7 +45,7 @@ def fetch_and_process_data(last_update=None):
         portfolio = fetch_odoo_data('project.project', ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'], domain=base_domain)
         employees = fetch_odoo_data('hr.employee', ['id', 'name', 'department_id', 'job_id', 'job_title'], domain=base_domain)
         sales = fetch_odoo_data('sale.order', ['name', 'partner_id', 'amount_total', 'date_order'], domain=base_domain)
-        financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'], domain=base_domain)
+        # financials = fetch_odoo_data('account.move', ['name', 'move_type', 'amount_total', 'date'], domain=base_domain)
         timesheet_entries = fetch_odoo_data('account.analytic.line', ['employee_id', 'task_id', 'project_id', 'unit_amount', 'date'], domain=base_domain)
         tasks = fetch_odoo_data('project.task', ['id', 'project_id', 'stage_id', 'name', 'create_date', 'date_end'], domain=base_domain)
 
@@ -53,7 +53,7 @@ def fetch_and_process_data(last_update=None):
         df_portfolio = validate_dataframe(pd.DataFrame(portfolio), ['id', 'name', 'partner_id', 'user_id', 'date_start', 'date', 'active'])
         df_employees = validate_dataframe(pd.DataFrame(employees), ['id', 'name', 'department_id', 'job_id', 'job_title'])
         df_sales = validate_dataframe(pd.DataFrame(sales), ['name', 'partner_id', 'amount_total', 'date_order'])
-        df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
+        # df_financials = validate_dataframe(pd.DataFrame(financials), ['name', 'move_type', 'amount_total', 'date'])
         df_timesheet = validate_dataframe(pd.DataFrame(timesheet_entries), ['employee_id', 'project_id', 'unit_amount', 'date'])
         df_tasks = validate_dataframe(pd.DataFrame(tasks), ['project_id', 'stage_id', 'create_date', 'date_end'])
 
@@ -61,7 +61,7 @@ def fetch_and_process_data(last_update=None):
         print("df_portfolio columns:", df_portfolio.columns)
         print("df_employees columns:", df_employees.columns)
         print("df_sales columns:", df_sales.columns)
-        print("df_financials columns:", df_financials.columns)
+        # print("df_financials columns:", df_financials.columns)
         print("df_timesheet columns:", df_timesheet.columns)
         print("df_tasks columns:", df_tasks.columns)
 
@@ -69,7 +69,7 @@ def fetch_and_process_data(last_update=None):
         date_columns = {
             'df_portfolio': ['date_start', 'date'],
             'df_sales': ['date_order'],
-            'df_financials': ['date'],
+            # 'df_financials': ['date'],
             'df_timesheet': ['date'],
             'df_tasks': ['create_date', 'date_end']
         }
@@ -97,7 +97,7 @@ def fetch_and_process_data(last_update=None):
         if 'project_id' in df_tasks.columns:
             df_tasks['project_name'] = df_tasks['project_id'].map(project_id_to_name)
 
-        return df_portfolio, df_employees, df_sales, df_financials, df_timesheet, df_tasks
+        return df_portfolio, df_employees, df_sales, df_timesheet, df_tasks
     except Exception as e:
         print(f"Error in fetch_and_process_data: {e}")
         return None, None, None, None, None, None
