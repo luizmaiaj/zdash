@@ -252,7 +252,54 @@ def create_app():
                         )
                     ])
                 ])
-            ])
+            ]),
+            dcc.Tab(label='Pivot Table', children=[
+                html.Div([
+                    html.Div([
+                        dcc.Dropdown(
+                            id='pivot-dataframe-selector',
+                            options=[
+                                {'label': 'Portfolio', 'value': 'df_portfolio'},
+                                {'label': 'Employees', 'value': 'df_employees'},
+                                {'label': 'Sales', 'value': 'df_sales'},
+                                {'label': 'Timesheet', 'value': 'df_timesheet'},
+                                {'label': 'Tasks', 'value': 'df_tasks'}
+                            ],
+                            value='df_timesheet',
+                            placeholder="Select a dataframe"
+                        ),
+                        dcc.Dropdown(id='pivot-index-selector', multi=True, placeholder="Select index (rows)"),
+                        dcc.Dropdown(id='pivot-columns-selector', multi=True, placeholder="Select columns"),
+                        dcc.Dropdown(id='pivot-values-selector', multi=True, placeholder="Select values"),
+                        dcc.Dropdown(
+                            id='pivot-aggfunc-selector',
+                            options=[
+                                {'label': 'Sum', 'value': 'sum'},
+                                {'label': 'Mean', 'value': 'mean'},
+                                {'label': 'Count', 'value': 'count'},
+                                {'label': 'Min', 'value': 'min'},
+                                {'label': 'Max', 'value': 'max'}
+                            ],
+                            value='sum',
+                            placeholder="Select aggregation function"
+                        ),
+                        dcc.Dropdown(
+                            id='pivot-chart-type-selector',
+                            options=[
+                                {'label': 'Bar', 'value': 'bar'},
+                                {'label': 'Line', 'value': 'line'},
+                                {'label': 'Scatter', 'value': 'scatter'}
+                            ],
+                            value='bar',
+                            placeholder="Select chart type"
+                        ),
+                    ], style={'width': '25%', 'display': 'inline-block', 'vertical-align': 'top'}),
+                    html.Div([
+                        dcc.Graph(id='pivot-chart'),
+                        html.Div(id='pivot-table-container')
+                    ], style={'width': '75%', 'display': 'inline-block'})
+                ])
+            ]),
         ], id='tabs'),
 
         # Store for holding the current data
