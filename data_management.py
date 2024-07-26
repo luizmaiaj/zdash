@@ -174,37 +174,51 @@ class DataManager:
             json.dump(self.financials_data, f, cls=DateTimeEncoder)
 
     def load_financials_data(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict:
+        logger.info(f"Loading financial data. Start date: {start_date}, End date: {end_date}")
         if os.path.exists(self.FINANCIALS_FILE):
             with open(self.FINANCIALS_FILE, 'r') as f:
                 data = json.load(f)
-            
+            logger.info(f"Loaded data for {len(data)} projects from file")
+
             filtered_data = {}
             for project, project_data in data.items():
+                logger.debug(f"Processing project: {project}")
                 filtered_daily_data = []
                 for daily_data in project_data['daily_data']:
                     date = pd.to_datetime(daily_data['date'])
                     if (start_date is None or date >= start_date) and (end_date is None or date <= end_date):
                         filtered_daily_data.append(daily_data)
                 
+                logger.debug(f"Project {project}: {len(filtered_daily_data)} days of data after date filtering")
+                
                 if filtered_daily_data:
+                    total_hours = sum(day['unit_amount'] for day in filtered_daily_data)
+                    # Calculate the fraction of total hours that fall within the date range
+                    hours_fraction = total_hours / project_data['total_hours'] if project_data['total_hours'] > 0 else 0
+                    # Calculate the prorated revenue based on the fraction of hours
+                    prorated_revenue = project_data['total_revenue'] * hours_fraction
+
                     filtered_data[project] = {
-                        'total_revenue': project_data['total_revenue'],
-                        'total_hours': project_data['total_hours'],
+                        'total_revenue': prorated_revenue,
+                        'total_hours': total_hours,
                         'daily_data': filtered_daily_data
                     }
-            
+                    logger.debug(f"Project {project} calculated revenue: {prorated_revenue}")
+
             # If no data falls within the specified range, return all available data
             if not filtered_data:
                 logger.warning("No data found within specified date range. Returning all available data.")
                 return data
-            
-            # Recalculate total_revenue and total_hours for the filtered data
-            for project, project_data in filtered_data.items():
-                project_data['total_revenue'] = sum(day['revenue'] for day in project_data['daily_data'] if 'revenue' in day)
-                project_data['total_hours'] = sum(day['unit_amount'] for day in project_data['daily_data'] if 'unit_amount' in day)
-            
+
+            total_revenue = sum(project_data['total_revenue'] for project_data in filtered_data.values())
+            total_hours = sum(project_data['total_hours'] for project_data in filtered_data.values())
+            logger.info(f"Total revenue across all projects: {total_revenue}")
+            logger.info(f"Total hours across all projects: {total_hours}")
+
             return filtered_data
-        return {}
+        else:
+            logger.warning(f"Financial data file {self.FINANCIALS_FILE} not found")
+            return {}
 
     def get_last_calculation_time(self) -> Optional[datetime]:
         if os.path.exists(self.LAST_CALCULATION_FILE):

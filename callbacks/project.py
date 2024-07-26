@@ -22,6 +22,7 @@ def register_project_callback(app, data_manager: DataManager):
          Input('man-hours-toggle', 'value')]
     )
     def update_project_charts(selected_project, start_date, end_date, selected_employees, use_man_hours):
+        logger.info(f"Updating project charts for project: {selected_project}")
         if not selected_project:
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
@@ -32,6 +33,7 @@ def register_project_callback(app, data_manager: DataManager):
         project_timesheet = data_manager.df_timesheet[data_manager.df_timesheet['project_name'] == selected_project].copy()
 
         if project_timesheet.empty:
+            logger.warning(f"No timesheet data found for project: {selected_project}")
             return go.Figure(), go.Figure(), go.Figure(), "", ""
 
         # Calculate total project revenue (not considering date range)
@@ -49,6 +51,7 @@ def register_project_callback(app, data_manager: DataManager):
 
         # Calculate revenue for the selected period (and selected employees if any)
         period_revenue = calculate_project_revenue(period_timesheet, data_manager.df_employees, data_manager.job_costs)
+        logger.info(f"Period revenue calculated: {period_revenue}")
 
         # Timeline Chart (Man Hours/Days)
         timeline_fig = create_timeline_chart(period_timesheet, data_manager.df_tasks, selected_project, use_man_hours)
@@ -100,7 +103,8 @@ def calculate_project_revenue(timesheet_data, employees_data, job_costs):
             logger.warning(f"Invalid revenue data for job title: {job_title}")
             daily_revenue = 0
         
-        revenue += (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
+        entry_revenue = (row['unit_amount'] / 8) * daily_revenue  # Convert hours to days
+        revenue += entry_revenue
     return revenue
 
 def calculate_legend_height(fig):
@@ -279,7 +283,8 @@ def extract_job_title(employee):
         try:
             job_id_list = ast.literal_eval(employee['job_id'])
             return job_id_list[1] if len(job_id_list) > 1 else 'Unknown'
-        except (ValueError, SyntaxError, IndexError):
+        except (ValueError, SyntaxError, IndexError) as e:
+            logger.error(f"Job title not found: {e}")
             return 'Unknown'
     elif 'job_title' in employee:
         return employee['job_title']

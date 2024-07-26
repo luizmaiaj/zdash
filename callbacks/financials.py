@@ -32,16 +32,19 @@ def register_financials_callbacks(app, data_manager: DataManager):
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
 
-            # Load existing financial data if available
+            # Load existing financial data if available, filtered by date range
+            logger.info(f"Loading financial data, Date range: {start_date} to {end_date}")
             financials_data = data_manager.load_financials_data(start_date, end_date)
+            logger.info(f"Loaded financial data: {len(financials_data)} projects")
 
             if not financials_data or 'calculate-button' in ctx.triggered[0]['prop_id']:
-                # Calculate new financial data
+                logger.info("Calculating new financial data")
                 financials_data = calculate_all_financials(data_manager, start_date, end_date)
                 data_manager.save_financials_data(financials_data)
                 data_manager.set_last_calculation_time(datetime.now())
 
             if not financials_data:
+                logger.warning("No financial data available")
                 empty_fig = go.Figure()
                 return empty_fig, "No data available", empty_fig, empty_fig, "No data available. Please check your date range."
 
@@ -51,6 +54,7 @@ def register_financials_callbacks(app, data_manager: DataManager):
             fig_revenue = create_revenue_chart(financials_data)
 
             total_revenue = sum(project_data['total_revenue'] for project_data in financials_data.values())
+            logger.info(f"Total revenue calculated: {total_revenue}")
 
             return [
                 fig_financials,
@@ -73,7 +77,7 @@ def register_financials_callbacks(app, data_manager: DataManager):
             ]
 
 def calculate_all_financials(data_manager: DataManager, start_date, end_date):
-    logger.debug("Calculating all financials")
+    logger.info("Calculating all financials")
     
     financials_data = {}
     
@@ -82,8 +86,6 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
     if not date_column:
         logger.error("No date column found in timesheet data")
         return financials_data
-    
-    logger.debug(f"Using '{date_column}' as the date column")
     
     # Convert date column to datetime
     try:
@@ -95,6 +97,7 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
     
     for _, project in data_manager.df_portfolio.iterrows():
         project_name = project['name']
+        logger.info(f"Calculating financials for project: {project_name}")
         project_timesheet = data_manager.df_timesheet[
             (data_manager.df_timesheet['project_name'] == project_name) &
             (data_manager.df_timesheet[date_column] >= start_date) &
@@ -102,6 +105,7 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
         ].copy()  # Create an explicit copy
         
         if project_timesheet.empty:
+            logger.warning(f"No timesheet data for project: {project_name}")
             continue
         
         project_revenue = calculate_project_revenue(project_timesheet, data_manager.df_employees, data_manager.job_costs)
@@ -127,9 +131,11 @@ def calculate_all_financials(data_manager: DataManager, start_date, end_date):
         
         financials_data[project_name] = project_financials
     
+    logger.info(f"Financials calculated for {len(financials_data)} projects")
     return financials_data
 
 def create_financials_chart(financials_data, data_manager):
+    logger.info("Creating financials chart")
     fig = go.Figure()
     
     # Create a DataFrame to hold all daily revenue data
@@ -143,6 +149,7 @@ def create_financials_chart(financials_data, data_manager):
         
         # Calculate daily revenue if not present
         if 'revenue' not in daily_data.columns:
+            logger.info(f"Calculating daily revenue for project: {project}")
             daily_data['revenue'] = daily_data.apply(
                 lambda row: calculate_project_revenue(
                     data_manager.df_timesheet[
@@ -155,20 +162,27 @@ def create_financials_chart(financials_data, data_manager):
                 axis=1
             )
         
+        logger.debug(f"Daily revenue for {project}: {daily_data['revenue'].sum()}")
+        
         daily_data['project'] = project
         all_daily_data.append(daily_data)
     
     if not all_daily_data:
+        logger.warning("No daily data available for any project")
         return fig
     
     # Concatenate all daily data
     all_daily_data = pd.concat(all_daily_data)
+    logger.info(f"Total daily data rows: {len(all_daily_data)}")
     
     # Pivot the data to create a stacked bar chart
     pivoted_data = all_daily_data.pivot(index='date', columns='project', values='revenue').fillna(0)
+    logger.info(f"Pivoted data shape: {pivoted_data.shape}")
 
-   # Create stacked bar chart
+    # Create stacked bar chart
     for project in pivoted_data.columns:
+        project_revenue = pivoted_data[project].sum()
+        logger.info(f"Total revenue for {project}: {project_revenue}")
         fig.add_trace(go.Bar(
             x=pivoted_data.index,
             y=pivoted_data[project],
@@ -198,11 +212,13 @@ def create_financials_chart(financials_data, data_manager):
     return fig
 
 def create_hours_chart(financials_data):
+    logger.info("Creating hours chart")
     fig = go.Figure()
     
     for project, data in financials_data.items():
         daily_data = pd.DataFrame(data['daily_data'])
         if daily_data.empty:
+            logger.warning(f"No daily data for project: {project}")
             continue
         
         date_column = daily_data.columns[0]  # Assume the first column is the date column
@@ -220,13 +236,18 @@ def create_hours_chart(financials_data):
         barmode='stack'
     )
     
+    logger.info("Hours chart created")
     return fig
 
 def create_revenue_chart(financials_data):
+    logger.info("Creating revenue chart")
     fig = go.Figure()
     
     projects = list(financials_data.keys())
     revenues = [data['total_revenue'] for data in financials_data.values()]
+    
+    logger.info(f"Projects: {projects}")
+    logger.info(f"Revenues: {revenues}")
     
     fig.add_trace(go.Bar(
         x=projects,
@@ -243,4 +264,5 @@ def create_revenue_chart(financials_data):
         barmode='stack'
     )
     
+    logger.info("Revenue chart created")
     return fig
